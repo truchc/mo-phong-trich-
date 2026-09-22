@@ -165,9 +165,16 @@ try:
     ax.set_ylabel("Áp suất P (bar)", fontsize=10)
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend(loc="upper left", fontsize=9)
-    ax.set_xlim(t_min, t_max)
-    ax.set_ylim(p_min, p_max)
+    
+    # TỰ ĐỘNG NỚI RỘNG KHUNG ĐỒ THỊ CHO HỖN HỢP
+    if solvent == "Ethanol_Water":
+        ax.set_xlim(20.0, 350.0)  # Tăng giới hạn nhiệt độ lên 350°C để thấy điểm tới hạn
+        ax.set_ylim(1.0, 160.0)   # Tăng giới hạn áp suất lên 160 bar
+    else:
+        ax.set_xlim(t_min, t_max)
+        ax.set_ylim(p_min, p_max)
 
+    
     st.pyplot(fig)
 
 except Exception as e:
