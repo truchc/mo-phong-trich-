@@ -7,7 +7,7 @@ import streamlit as st
 # Cấu hình giao diện Streamlit hiển thị tối ưu trên cả điện thoại và máy tính
 st.set_page_config(page_title="SFE/SWE Thermophysical Tool", layout="centered")
 
-st.title("🔬 Công Cụ Nhiệt Động Lực Học Dung Môi Siêu Tới Hạn & Chất lỏng áp ")
+st.title("🔬 Công Cụ Nhiệt Động Lực Học Dung Môi Siêu Tới Hạn & Chất lỏng áp suất")
 st.caption(
     "Phát triển bởi TS. Hồ Công Trực"
 )
