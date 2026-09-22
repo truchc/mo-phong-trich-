@@ -74,7 +74,6 @@ P_Pa = P_input * 1e5
 # =========================================================================
 try:
     if solvent == "Ethanol_Water":
-        # Thuật toán xử lý cho Hỗn hợp bằng AbstractState nhằm đảm bảo độ chính xác
         state = CP.AbstractState("HEOS", "Ethanol&Water")
         state.set_mass_fractions([w_ethanol, w_water])
         state.update(CP.PT_INPUTS, P_Pa, T_K)
@@ -84,7 +83,6 @@ try:
         enthalpy = state.hmass() / 1000  # kJ/kg
         phase_vn = "Chất lỏng siêu áp nén (Compressed Liquid Mixture)"
     else:
-        # Thuật toán xử lý cho Chất thuần túy (CO2 hoặc Nước độc lập)
         density = CP.PropsSI("D", "T", T_K, "P", P_Pa, solvent)
         viscosity = CP.PropsSI("V", "T", T_K, "P", P_Pa, solvent)
         enthalpy = CP.PropsSI("H", "T", T_K, "P", P_Pa, solvent) / 1000
@@ -135,17 +133,11 @@ try:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.metric(
-            label="Khối lượng riêng (Density)", value=f"{density:.1f} kg/m³"
-        )
-        st.metric(
-            label="Độ nhớt (Viscosity)", value=f"{viscosity * 1e6:.3f} x 10⁻⁶ Pa·s"
-        )
+        st.metric(label="Khối lượng riêng (Density)", value=f"{density:.1f} kg/m³")
+        st.metric(label="Độ nhớt (Viscosity)", value=f"{viscosity * 1e6:.3f} x 10⁻⁶ Pa·s")
     with col2:
         st.metric(label="Nhiệt nội năng (Enthalpy)", value=f"{enthalpy:.1f} kJ/kg")
-        st.metric(
-            label="Điểm vận hành thực tế", value=f"{T_input}°C, {P_input} bar"
-        )
+        st.metric(label="Điểm vận hành thực tế", value=f"{T_input}°C, {P_input} bar")
 
     # =========================================================================
     # 4. THUẬT TOÁN VẼ ĐỒ THỊ GIẢN ĐỒ PHA TRỰC QUAN
@@ -180,7 +172,6 @@ try:
         )
         ax.set_title(f"Vị trí vận hành hỗn hợp Ethanol/Nước ({nong_do_percent}%)", fontsize=11)
 
-    # Đánh dấu ĐIỂM VẬN HÀNH HIỆN TẠI trên đồ thị
     ax.plot(T_input, P_input, "bX", markersize=11, label="Điểm vận hành hiện tại")
     ax.axvline(x=T_input, color="gray", linestyle="--", linewidth=0.8)
     ax.axhline(y=P_input, color="gray", linestyle="--", linewidth=0.8)
@@ -220,24 +211,33 @@ try:
         state_vle = CP.AbstractState("HEOS", "Ethanol&Water")
         
         for pct in nong_do_list:
-            w_eth_table = pct / 100.0
-            w_wat_table = 1.0 - w_eth_table
+            w_e_t = pct / 100.0
+            w_w_t = 1.0 - w_e_t
             col_nong_do.append(f"{pct}%")
             
             try:
-                state_vle.set_mass_fractions([w_eth_table, w_wat_table])
+                state_vle.set_mass_fractions([w_e_t, w_w_t])
                 
-                # Tính nhiệt độ bắt đầu sôi (Bubble point - Q=0)
+                # 1. Tính điểm sôi (Bubble point)
                 state_vle.update(CP.PQ_INPUTS, P_Pa, 0.0)
-                T_bubble_C = state_vle.T() - 273.15
-                col_bubble.append(f"{T_bubble_C:.2f} °C")
+                T_b = state_vle.T() - 273.15
+                col_bubble.append(f"{T_b:.2f} °C")
                 
-                # Tính nhiệt độ hóa hơi hoàn toàn (Dew point - Q=1)
+                # 2. Tính điểm sương (Dew point)
                 state_vle.update(CP.PQ_INPUTS, P_Pa, 1.0)
-                T_dew_C = state_vle.T() - 273.15
-                col_dew.append(f"{T_dew_C:.2f} °C")
+                T_d = state_vle.T() - 273.15
+                col_dew.append(f"{T_d:.2f} °C")
                 
-                # Tính hằng số điện môi tại nhiệt độ bắt đầu sôi tương ứng
-                v_eth_table = (w_eth_table / 0.789) / ((w_eth_table / 0.789) + (w_wat_table / 1.0))
-                eps_w_table = 78.54 - 0.360 * (T_bubble_C - 25.0)
-                eps_e_table = 24.30 - 0.130 * (T_bubble_C - 25.0)
+                # 3. Tính hằng số điện môi thu gọn thành 1 dòng toán để phá bỏ lỗi gập thụt lề
+                v_e_t = (w_e_t / 0.789) / ((w_e_t / 0.789) + (w_w_t / 1.0))
+                eps_mix_table = max(1.0, v_e_t * (24.30 - 0.130 * (T_b - 25.0)) + (1.0 - v_e_t) * (78.54 - 0.360 * (T_b - 25.0)))
+                col_eps.append(f"{eps_mix_table:.2f}")
+                
+            except:
+                col_bubble.append("Vượt điểm tới hạn")
+                col_dew.append("Vượt điểm tới hạn")
+                col_eps.append("N/A")
+                
+        display_df = {
+            "Nồng độ Ethanol": col_nong_do,
+            "Nhiệt độ bắt đầu sôi (Bubble Point)": col_bubble,
