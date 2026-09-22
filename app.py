@@ -141,11 +141,20 @@ try:
         )
         ax.set_title(f"Giản đồ Pha Áp suất - Nhiệt độ của {solvent}", fontsize=11)
     else:
-        # Đối với hỗn hợp phức tạp, vẽ lưới đồ thị áp suất - nhiệt độ để định vị điểm
-        ax.set_title(
-            f"Vị trí vận hành hỗn hợp Ethanol/Nước ({nong_do_percent}%)",
-            fontsize=11,
-        )
+        # TỰ ĐỘNG TÍNH ĐIỂM TỚI HẠN ĐỘNG CHO HỖN HỢP ETHANOL/NƯỚC
+        try:
+            mix_T_crit = state.critical_temperature() - 273.15 # Đổi sang độ C
+            mix_P_crit = state.critical_pressure() / 1e5       # Đổi sang bar
+            
+            # Vẽ điểm tới hạn động của hỗn hợp lên đồ thị
+            ax.plot(
+                mix_T_crit, mix_P_crit, "go", markersize=9, 
+                label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)"
+            )
+        except:
+            pass # Phòng trường hợp vùng nồng độ cực đoan toán học không giải được
+            
+        ax.set_title(f"Vị trí vận hành hỗn hợp Ethanol/Nước ({nong_do_percent}%)", fontsize=11)
 
     # Đánh dấu ĐIỂM VẬN HÀNH HIỆN TẠI trên đồ thị
     ax.plot(T_input, P_input, "bX", markersize=11, label="Điểm vận hành hiện tại")
