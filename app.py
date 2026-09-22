@@ -211,13 +211,19 @@ try:
         )
 
         nong_do_list = [1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.5]
-        data_table = []
+        
+        # Sử dụng mảng cấu trúc phẳng (Lists) để tạo bảng, triệt tiêu hoàn toàn dấu ngoặc nhọn {} ở vòng lặp
+        col_nong_do = []
+        col_bubble = []
+        col_dew = []
+        col_eps = []
         
         state_vle = CP.AbstractState("HEOS", "Ethanol&Water")
         
         for pct in nong_do_list:
             w_eth_table = pct / 100.0
             w_wat_table = 1.0 - w_eth_table
+            col_nong_do.append(f"{pct}%")
             
             try:
                 state_vle.set_mass_fractions([w_eth_table, w_wat_table])
@@ -225,17 +231,13 @@ try:
                 # Tính nhiệt độ bắt đầu sôi (Bubble point - Q=0)
                 state_vle.update(CP.PQ_INPUTS, P_Pa, 0.0)
                 T_bubble_C = state_vle.T() - 273.15
+                col_bubble.append(f"{T_bubble_C:.2f} °C")
                 
                 # Tính nhiệt độ hóa hơi hoàn toàn (Dew point - Q=1)
                 state_vle.update(CP.PQ_INPUTS, P_Pa, 1.0)
                 T_dew_C = state_vle.T() - 273.15
+                col_dew.append(f"{T_dew_C:.2f} °C")
                 
                 # Tính hằng số điện môi tại nhiệt độ bắt đầu sôi tương ứng
                 v_eth_table = (w_eth_table / 0.789) / ((w_eth_table / 0.789) + (w_wat_table / 1.0))
                 eps_w_table = 78.54 - 0.360 * (T_bubble_C - 25.0)
-                eps_e_table = 24.30 - 0.130 * (T_bubble_C - 25.0)
-                eps_mix_table = max(1.0, v_eth_table * eps_e_table + (1.0 - v_eth_table) * eps_w_table)
-
-                # Tạo dòng dữ liệu độc lập để tránh lỗi lồng ngoặc cú pháp
-                row_data = {
-                    "Nồng độ Ethanol": f"{pct}%",
