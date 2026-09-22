@@ -105,7 +105,6 @@ try:
             phase_vn = "Cận tới hạn (Subcritical Water)"
 
     # --- THUẬT TOÁN TÍNH HẰNG SỐ ĐIỆN MÔI (DIELECTRIC CONSTANT) ---
-    # Phản ánh tính chất phân cực suy giảm theo nhiệt độ tăng dần
     epsilon_water_base = 78.54 - 0.360 * (T_input - 25.0)
     epsilon_ethanol_base = 24.30 - 0.130 * (T_input - 25.0)
 
@@ -113,10 +112,9 @@ try:
         dielectric_const = max(1.0, epsilon_water_base)
         polarity_desc = "Phân cực mạnh (Hòa tan tốt chất vô cơ/muối/ion)"
     elif solvent == "CarbonDioxide":
-        dielectric_const = 1.01 if P_input < 73 else 1.25  # CO2 SFE không phân cực
+        dielectric_const = 1.01 if P_input < 73 else 1.25
         polarity_desc = "Không phân cực (Hòa tan tốt lipid, chất béo, tinh dầu)"
     else:  # Hỗn hợp Ethanol_Water
-        # Tính toán dựa trên phân số thể tích tương đương từ phân số khối lượng
         v_eth = (w_ethanol / 0.789) / ((w_ethanol / 0.789) + (w_water / 1.0))
         dielectric_const = v_eth * epsilon_ethanol_base + (1.0 - v_eth) * epsilon_water_base
         dielectric_const = max(1.0, dielectric_const)
@@ -157,7 +155,6 @@ try:
     fig, ax = plt.subplots(figsize=(6, 4.5))
 
     if solvent != "Ethanol_Water":
-        # Vẽ giản đồ pha chuẩn cho chất nguyên chất (CO2 hoặc H2O độc lập)
         T_triple = CP.PropsSI(solvent, "Tmin")
         T_crit = CP.PropsSI(solvent, "Tcrit")
         T_space = np.linspace(T_triple, T_crit, 200)
@@ -174,12 +171,9 @@ try:
         )
         ax.set_title(f"Giản đồ Pha Áp suất - Nhiệt độ của {solvent}", fontsize=11)
     else:
-        # THUẬT TOÁN ĐIỂM TỚI HẠN ĐỘNG CHO HỖN HỢP ETHANOL/NƯỚC (NỘI SUY THỰC NGHIỆM CHUẨN)
-        # Nước (0%): T_crit = 373.95 °C, P_crit = 220.64 bar | Ethanol (100%): T_crit = 240.75 °C, P_crit = 61.48 bar
         mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
         mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
         
-        # Vẽ điểm tới hạn động nhảy theo thanh trượt nồng độ của hỗn hợp
         ax.plot(
             mix_T_crit, mix_P_crit, "go", markersize=9, 
             label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)"
@@ -196,10 +190,9 @@ try:
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend(loc="upper left", fontsize=9)
     
-    # Thiết lập khung đồ thị bao quát toàn bộ vùng trạng thái
     if solvent == "Ethanol_Water":
-        ax.set_xlim(20.0, 400.0)  # Khung rộng 400°C ôm trọn vùng tới hạn của nước bão hòa
-        ax.set_ylim(1.0, 240.0)   # Khung rộng 240 bar ôm trọn áp suất tới hạn cao nhất
+        ax.set_xlim(20.0, 400.0)
+        ax.set_ylim(1.0, 240.0)
     else:
         ax.set_xlim(t_min, t_max)
         ax.set_ylim(p_min, p_max)
@@ -207,7 +200,7 @@ try:
     st.pyplot(fig)
 
     # =========================================================================
-    # 5. BỔ SUNG: BẢNG TRA CỨU ĐỘNG ĐIỂM SÔI & TÍNH PHÂN CỰC HỖN HỢP
+    # 5. BẢNG TRA CỨU ĐỘNG ĐIỂM SÔI & TÍNH PHÂN CỰC HỖN HỢP
     # =========================================================================
     if solvent == "Ethanol_Water":
         st.write("---")
@@ -217,7 +210,6 @@ try:
             f"tại các mốc nồng độ khác nhau dưới áp suất không đổi **{P_input} bar**."
         )
 
-        # Danh sách nồng độ tra cứu từ 1% đến 99.5% theo yêu cầu
         nong_do_list = [1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.5]
         data_table = []
         
@@ -233,3 +225,17 @@ try:
                 # Tính nhiệt độ bắt đầu sôi (Bubble point - Q=0)
                 state_vle.update(CP.PQ_INPUTS, P_Pa, 0.0)
                 T_bubble_C = state_vle.T() - 273.15
+                
+                # Tính nhiệt độ hóa hơi hoàn toàn (Dew point - Q=1)
+                state_vle.update(CP.PQ_INPUTS, P_Pa, 1.0)
+                T_dew_C = state_vle.T() - 273.15
+                
+                # Tính hằng số điện môi tại nhiệt độ bắt đầu sôi tương ứng
+                v_eth_table = (w_eth_table / 0.789) / ((w_eth_table / 0.789) + (w_wat_table / 1.0))
+                eps_w_table = 78.54 - 0.360 * (T_bubble_C - 25.0)
+                eps_e_table = 24.30 - 0.130 * (T_bubble_C - 25.0)
+                eps_mix_table = max(1.0, v_eth_table * eps_e_table + (1.0 - v_eth_table) * eps_w_table)
+
+                data_table.append({
+                    "Nồng độ Ethanol": f"{pct}%",
+                    "Nhiệt độ bắt đầu sôi (Bubble Point)": f"{T_bubble_C:.2f} °C",
