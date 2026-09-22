@@ -174,7 +174,57 @@ try:
         ax.set_ylim(p_min, p_max)
 
     st.pyplot(fig)
+# =========================================================================
+    # BỔ SUNG: BẢNG TRA CỨU NHIỆT ĐỘ SÔI HỖN HỢP THEO ÁP SUẤT VẬN HÀNH
+    # =========================================================================
+    if solvent == "Ethanol_Water":
+        st.write("---")
+        st.subheader(f"📋 Bảng nhiệt độ sôi hỗn hợp Ethanol/Nước tại {P_input} bar")
+        st.markdown(
+            f"Bảng dưới đây tính toán nhiệt độ bắt đầu sôi (Bubble point) và nhiệt độ hóa hơi hoàn toàn (Dew point) "
+            f"của hỗn hợp tương ứng với các nồng độ khác nhau tại áp suất cố định **{P_input} bar**."
+        )
 
+        # Định nghĩa các mốc nồng độ cần hiển thị theo yêu cầu từ 1% đến 99.5%
+        nong_do_list = [1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.5]
+        
+        data_table = []
+        
+        # Khởi tạo trạng thái tính toán bão hòa cho hỗn hợp
+        state_vle = CP.AbstractState("HEOS", "Ethanol&Water")
+        
+        # Tạo vòng lặp để tính toán nhiệt độ sôi cho từng mốc nồng độ
+        for pct in nong_do_list:
+            w_eth_table = pct / 100.0
+            w_wat_table = 1.0 - w_eth_table
+            
+            try:
+                state_vle.set_mass_fractions([w_eth_table, w_wat_table])
+                
+                # 1. Tính nhiệt độ bắt đầu sôi (Bubble point - Q=0) tại áp suất hệ thống
+                state_vle.update(CP.PQ_INPUTS, P_Pa, 0.0)
+                T_bubble_C = state_vle.T() - 273.15
+                
+                # 2. Tính nhiệt độ hóa hơi hoàn toàn (Dew point - Q=1) tại áp suất hệ thống
+                state_vle.update(CP.PQ_INPUTS, P_Pa, 1.0)
+                T_dew_C = state_vle.T() - 273.15
+                
+                # Thêm dòng dữ liệu vào bảng
+                data_table.append({
+                    "Nồng độ Ethanol (% khối lượng)": f"{pct}%",
+                    "Nhiệt độ bắt đầu sôi (Bubble Point)": f"{T_bubble_C:.2f} °C",
+                    "Nhiệt độ hóa hơi hoàn toàn (Dew Point)": f"{T_dew_C:.2f} °C"
+                })
+            except:
+                # Phòng trường hợp vùng áp suất quá cao vượt điểm tới hạn của mốc nồng độ đó
+                data_table.append({
+                    "Nồng độ Ethanol (% khối lượng)": f"{pct}%",
+                    "Nhiệt độ bắt đầu sôi (Bubble Point)": "Vượt điểm tới hạn",
+                    "Nhiệt độ hóa hơi hoàn toàn (Dew Point)": "Vượt điểm tới hạn"
+                })
+                
+        # Hiển thị bảng dữ liệu tĩnh/động đẹp mắt lên giao diện Streamlit
+        st.dataframe(data_table, use_container_width=True)
 except Exception as e:
     st.error(
         f"⚠️ Vùng áp suất/nhiệt độ này vượt quá giới hạn bão hòa thực nghiệm của thư viện cấu tử. Vui lòng chọn thông số khác! Chi tiết lỗi: {e}"
