@@ -70,7 +70,7 @@ T_K = T_input + 273.15
 P_Pa = P_input * 1e5
 
 # =========================================================================
-# 2. XỬ LÝ TOÁN NHIỆT ĐỘNG THEO TỪNG LOẠI DUNG MÔI
+# 2. XỬ LÝ TOÁN NHIỆT ĐỘNG VÀ ĐỒ THỊ AN TOÀN TRONG KHỐI TRY
 # =========================================================================
 try:
     if solvent == "Ethanol_Water":
@@ -212,7 +212,6 @@ try:
 
         nong_do_list = [1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.5]
         
-        # Sử dụng mảng cấu trúc phẳng (Lists) để tạo bảng, triệt tiêu hoàn toàn dấu ngoặc nhọn {} ở vòng lặp
         col_nong_do = []
         col_bubble = []
         col_dew = []
@@ -241,3 +240,4 @@ try:
                 # Tính hằng số điện môi tại nhiệt độ bắt đầu sôi tương ứng
                 v_eth_table = (w_eth_table / 0.789) / ((w_eth_table / 0.789) + (w_wat_table / 1.0))
                 eps_w_table = 78.54 - 0.360 * (T_bubble_C - 25.0)
+                eps_e_table = 24.30 - 0.130 * (T_bubble_C - 25.0)
