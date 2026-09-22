@@ -1,6 +1,7 @@
 import CoolProp.CoolProp as CP
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import streamlit as st
 
 # Cấu hình giao diện Streamlit hiển thị tối ưu trên cả điện thoại và máy tính
@@ -228,7 +229,7 @@ try:
                 T_d = state_vle.T() - 273.15
                 col_dew.append(f"{T_d:.2f} °C")
                 
-                # 3. Tính hằng số điện môi thu gọn thành 1 dòng toán để phá bỏ lỗi gập thụt lề
+                # 3. Tính hằng số điện môi thu gọn thành 1 dòng toán để phá bảo lỗi gập thụt lề
                 v_e_t = (w_e_t / 0.789) / ((w_e_t / 0.789) + (w_w_t / 1.0))
                 eps_mix_table = max(1.0, v_e_t * (24.30 - 0.130 * (T_b - 25.0)) + (1.0 - v_e_t) * (78.54 - 0.360 * (T_b - 25.0)))
                 col_eps.append(f"{eps_mix_table:.2f}")
@@ -238,6 +239,4 @@ try:
                 col_dew.append("Vượt điểm tới hạn")
                 col_eps.append("N/A")
                 
-        display_df = {
-            "Nồng độ Ethanol": col_nong_do,
-            "Nhiệt độ bắt đầu sôi (Bubble Point)": col_bubble,
+        # Khởi tạo bảng DataFrame rỗng trực tiếp từ thư viện pandas, loại bỏ hoàn toàn dấu ngoặc nhọn
