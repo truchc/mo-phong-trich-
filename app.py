@@ -11,7 +11,9 @@ st.caption(
     "Phát triển bởi TS. Chuyên gia Công nghệ Thực phẩm & Thiết bị Hóa học"
 )
 
-# 1. THANH ĐIỀU KHIỂN
+# =========================================================================
+# 1. THANH ĐIỀU KHIỂN & NHẬP THÔNG SỐ VẬN HÀNH
+# =========================================================================
 st.header("⚙️ Thông số vận hành")
 
 # Lựa chọn dung môi mở rộng bao gồm cả hỗn hợp
@@ -67,7 +69,9 @@ P_input = st.slider(
 T_K = T_input + 273.15
 P_Pa = P_input * 1e5
 
+# =========================================================================
 # 2. XỬ LÝ TOÁN NHIỆT ĐỘNG THEO TỪNG LOẠI DUNG MÔI
+# =========================================================================
 try:
     if solvent == "Ethanol_Water":
         # Thuật toán xử lý cho Hỗn hợp bằng AbstractState nhằm đảm bảo độ chính xác
@@ -100,9 +104,36 @@ try:
         if solvent == "Water" and T_input > 100 and phase_idx == 2:
             phase_vn = "Cận tới hạn (Subcritical Water)"
 
+    # --- THUẬT TOÁN TÍNH HẰNG SỐ ĐIỆN MÔI (DIELECTRIC CONSTANT) ---
+    # Phản ánh tính chất phân cực suy giảm theo nhiệt độ tăng dần
+    epsilon_water_base = 78.54 - 0.360 * (T_input - 25.0)
+    epsilon_ethanol_base = 24.30 - 0.130 * (T_input - 25.0)
+
+    if solvent == "Water":
+        dielectric_const = max(1.0, epsilon_water_base)
+        polarity_desc = "Phân cực mạnh (Hòa tan tốt chất vô cơ/muối/ion)"
+    elif solvent == "CarbonDioxide":
+        dielectric_const = 1.01 if P_input < 73 else 1.25  # CO2 SFE không phân cực
+        polarity_desc = "Không phân cực (Hòa tan tốt lipid, chất béo, tinh dầu)"
+    else:  # Hỗn hợp Ethanol_Water
+        # Tính toán dựa trên phân số thể tích tương đương từ phân số khối lượng
+        v_eth = (w_ethanol / 0.789) / ((w_ethanol / 0.789) + (w_water / 1.0))
+        dielectric_const = v_eth * epsilon_ethanol_base + (1.0 - v_eth) * epsilon_water_base
+        dielectric_const = max(1.0, dielectric_const)
+        
+        if dielectric_const > 50:
+            polarity_desc = "Phân cực mạnh (Hệ dung môi chứa nhiều nước)"
+        elif dielectric_const > 35:
+            polarity_desc = "Phân cực trung bình (Vùng tối ưu trích hoạt chất hữu cơ)"
+        else:
+            polarity_desc = "Phân cực yếu (Hệ dung môi chứa nhiều cồn)"
+
+    # =========================================================================
     # 3. HIỂN THỊ KẾT QUẢ SỐ LIỆU ĐẸP MẮT (METRICS)
+    # =========================================================================
     st.subheader("📊 Kết quả tính toán trạng thái")
     st.info(f"**Trạng thái pha:** {phase_vn}")
+    st.warning(f"⚡ **Tính chất phân cực:** Hằng số điện môi $\\varepsilon$ = {dielectric_const:.2f} | {polarity_desc}")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -118,7 +149,9 @@ try:
             label="Điểm vận hành thực tế", value=f"{T_input}°C, {P_input} bar"
         )
 
-    # 4. THUẬT TOÁN VẼ ĐỒ THỊ GIẢN ĐỒ PHA
+    # =========================================================================
+    # 4. THUẬT TOÁN VẼ ĐỒ THỊ GIẢN ĐỒ PHA TRỰC QUAN
+    # =========================================================================
     st.subheader("📈 Giản đồ pha trực quan")
 
     fig, ax = plt.subplots(figsize=(6, 4.5))
@@ -141,14 +174,12 @@ try:
         )
         ax.set_title(f"Giản đồ Pha Áp suất - Nhiệt độ của {solvent}", fontsize=11)
     else:
-        # THUẬT TOÁN ĐIỂM TỚI HẠN ĐỘNG CHUẨN XÁC CHO HỖN HỢP ETHANOL/NƯỚC (NỘI SUY THỰC NGHIỆM)
-        # Điểm tới hạn của Nước nguyên chất (0% Ethanol): T = 373.95 °C, P = 220.64 bar
-        # Điểm tới hạn của Ethanol nguyên chất (100% Ethanol): T = 240.75 °C, P = 61.48 bar
-        # Nội suy tuyến tính theo phân số khối lượng thực tế để lấy giá trị gần đúng chuẩn xác
+        # THUẬT TOÁN ĐIỂM TỚI HẠN ĐỘNG CHO HỖN HỢP ETHANOL/NƯỚC (NỘI SUY THỰC NGHIỆM CHUẨN)
+        # Nước (0%): T_crit = 373.95 °C, P_crit = 220.64 bar | Ethanol (100%): T_crit = 240.75 °C, P_crit = 61.48 bar
         mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
         mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
         
-        # Vẽ điểm tới hạn của hỗn hợp
+        # Vẽ điểm tới hạn động nhảy theo thanh trượt nồng độ của hỗn hợp
         ax.plot(
             mix_T_crit, mix_P_crit, "go", markersize=9, 
             label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)"
@@ -165,35 +196,33 @@ try:
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend(loc="upper left", fontsize=9)
     
-    # Định cấu hình trục bao quát
+    # Thiết lập khung đồ thị bao quát toàn bộ vùng trạng thái
     if solvent == "Ethanol_Water":
-        ax.set_xlim(20.0, 400.0)  # Nới rộng lên 400°C để ôm trọn điểm tới hạn của vùng nhiều nước
-        ax.set_ylim(1.0, 240.0)   # Nới rộng lên 240 bar để ôm trọn áp suất tới hạn
+        ax.set_xlim(20.0, 400.0)  # Khung rộng 400°C ôm trọn vùng tới hạn của nước bão hòa
+        ax.set_ylim(1.0, 240.0)   # Khung rộng 240 bar ôm trọn áp suất tới hạn cao nhất
     else:
         ax.set_xlim(t_min, t_max)
         ax.set_ylim(p_min, p_max)
 
     st.pyplot(fig)
-# =========================================================================
-    # BỔ SUNG: BẢNG TRA CỨU NHIỆT ĐỘ SÔI HỖN HỢP THEO ÁP SUẤT VẬN HÀNH
+
+    # =========================================================================
+    # 5. BỔ SUNG: BẢNG TRA CỨU ĐỘNG ĐIỂM SÔI & TÍNH PHÂN CỰC HỖN HỢP
     # =========================================================================
     if solvent == "Ethanol_Water":
         st.write("---")
-        st.subheader(f"📋 Bảng nhiệt độ sôi hỗn hợp Ethanol/Nước tại {P_input} bar")
+        st.subheader(f"📋 Bảng nhiệt độ sôi & hằng số điện môi hỗn hợp tại {P_input} bar")
         st.markdown(
-            f"Bảng dưới đây tính toán nhiệt độ bắt đầu sôi (Bubble point) và nhiệt độ hóa hơi hoàn toàn (Dew point) "
-            f"của hỗn hợp tương ứng với các nồng độ khác nhau tại áp suất cố định **{P_input} bar**."
+            f"Bảng dưới đây liệt kê điểm sôi và tính chất phân cực (Hằng số điện môi $\\varepsilon$) "
+            f"tại các mốc nồng độ khác nhau dưới áp suất không đổi **{P_input} bar**."
         )
 
-        # Định nghĩa các mốc nồng độ cần hiển thị theo yêu cầu từ 1% đến 99.5%
+        # Danh sách nồng độ tra cứu từ 1% đến 99.5% theo yêu cầu
         nong_do_list = [1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.5]
-        
         data_table = []
         
-        # Khởi tạo trạng thái tính toán bão hòa cho hỗn hợp
         state_vle = CP.AbstractState("HEOS", "Ethanol&Water")
         
-        # Tạo vòng lặp để tính toán nhiệt độ sôi cho từng mốc nồng độ
         for pct in nong_do_list:
             w_eth_table = pct / 100.0
             w_wat_table = 1.0 - w_eth_table
@@ -201,31 +230,6 @@ try:
             try:
                 state_vle.set_mass_fractions([w_eth_table, w_wat_table])
                 
-                # 1. Tính nhiệt độ bắt đầu sôi (Bubble point - Q=0) tại áp suất hệ thống
+                # Tính nhiệt độ bắt đầu sôi (Bubble point - Q=0)
                 state_vle.update(CP.PQ_INPUTS, P_Pa, 0.0)
                 T_bubble_C = state_vle.T() - 273.15
-                
-                # 2. Tính nhiệt độ hóa hơi hoàn toàn (Dew point - Q=1) tại áp suất hệ thống
-                state_vle.update(CP.PQ_INPUTS, P_Pa, 1.0)
-                T_dew_C = state_vle.T() - 273.15
-                
-                # Thêm dòng dữ liệu vào bảng
-                data_table.append({
-                    "Nồng độ Ethanol (% khối lượng)": f"{pct}%",
-                    "Nhiệt độ bắt đầu sôi (Bubble Point)": f"{T_bubble_C:.2f} °C",
-                    "Nhiệt độ hóa hơi hoàn toàn (Dew Point)": f"{T_dew_C:.2f} °C"
-                })
-            except:
-                # Phòng trường hợp vùng áp suất quá cao vượt điểm tới hạn của mốc nồng độ đó
-                data_table.append({
-                    "Nồng độ Ethanol (% khối lượng)": f"{pct}%",
-                    "Nhiệt độ bắt đầu sôi (Bubble Point)": "Vượt điểm tới hạn",
-                    "Nhiệt độ hóa hơi hoàn toàn (Dew Point)": "Vượt điểm tới hạn"
-                })
-                
-        # Hiển thị bảng dữ liệu tĩnh/động đẹp mắt lên giao diện Streamlit
-        st.dataframe(data_table, use_container_width=True)
-except Exception as e:
-    st.error(
-        f"⚠️ Vùng áp suất/nhiệt độ này vượt quá giới hạn bão hòa thực nghiệm của thư viện cấu tử. Vui lòng chọn thông số khác! Chi tiết lỗi: {e}"
-    )
