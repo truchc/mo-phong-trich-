@@ -236,6 +236,6 @@ try:
                 eps_e_table = 24.30 - 0.130 * (T_bubble_C - 25.0)
                 eps_mix_table = max(1.0, v_eth_table * eps_e_table + (1.0 - v_eth_table) * eps_w_table)
 
-                data_table.append({
+                # Tạo dòng dữ liệu độc lập để tránh lỗi lồng ngoặc cú pháp
+                row_data = {
                     "Nồng độ Ethanol": f"{pct}%",
-                    "Nhiệt độ bắt đầu sôi (Bubble Point)": f"{T_bubble_C:.2f} °C",
