@@ -129,9 +129,8 @@ try:
         viscosity = state.viscosity()
         enthalpy = state.hmass() / 1000
         
-        # Xác định pha cho hỗn hợp dựa trên bộ tạo cập nhật trạng thái thực tế
+        # Xác định pha cho hỗn hợp nhị phân
         try:
-            # Lấy thông số pha từ cấu trúc trừu tượng của hỗn hợp nhị phân
             p_idx = state.phase()
             phase_dict = {
                 CP.iphase_liquid: "Chất lỏng dưới hạn / Áp suất cao (Compressed Liquid Mixture)",
@@ -149,7 +148,7 @@ try:
         viscosity = CP.PropsSI("V", "T", T_K, "P", P_Pa, solvent)
         enthalpy = CP.PropsSI("H", "T", T_K, "P", P_Pa, solvent) / 1000
         
-        # SỬA LỖI CHÍNH: Mã pha trả về từ PhaseSI là dạng chuỗi string trong phiên bản CoolProp mới, không phải số nguyên!
+        # Sửa mã pha cho các chất nguyên chất (trả về chuỗi ký tự ở CoolProp bản mới)
         phase_str = CP.PhaseSI("T", T_K, "P", P_Pa, solvent)
         phase_dict = {
             "liquid": "Chất lỏng (Liquid)",
@@ -173,8 +172,7 @@ try:
         dielectric_const = max(1.0, epsilon_water_base)
         polarity_desc = "Phân cực mạnh (Hòa tan tốt chất vô cơ/muối/ion)"
     elif solvent == "CarbonDioxide":
-        # SỬA LỖI CHÍNH: Tính hằng số điện môi của CO2 theo phương trình thực nghiệm bậc hai dựa trên khối lượng riêng (density)
-        # Công thức chuẩn khoa học: epsilon = 1 + A*rho + B*rho^2 (rho tính bằng g/cm3)
+        # Áp dụng công thức thực nghiệm tính toán theo mật độ phân tử thực tế
         rho_g_cm3 = density / 1000.0
         dielectric_const = 1.0 + 0.423 * rho_g_cm3 + 0.052 * (rho_g_cm3 ** 2)
         polarity_desc = "Không phân cực (Hòa tan tốt lipid, chất béo, tinh dầu)"
@@ -210,10 +208,14 @@ try:
     fig, ax = plt.subplots(figsize=(6, 4.5))
 
     if solvent != "Ethanol_Water":
-        # SỬA LỖI CHÍNH: Thay đổi cách lấy giá trị Tmin tránh lỗi sập thư viện
         T_triple = CP.PropsSI("Tmin", "T", 0, "P", 0, solvent)
         T_crit = CP.PropsSI("Tcrit", "T", 0, "P", 0, solvent)
         T_space = np.linspace(T_triple, T_crit - 0.05, 200)
         P_sat = [CP.PropsSI("P", "T", t, "Q", 0, solvent) / 1e5 for t in T_space]
         
         ax.plot(T_space - 273.15, P_sat, "r-", linewidth=2, label="Đường bão hòa Lỏng - Hơi")
+        ax.plot(critical_T, critical_P, "go", markersize=8, label=f"Điểm tới hạn ({critical_T:.1f}°C, {critical_P:.1f} bar)")
+        ax.set_title(f"Giản đồ Pha Áp suất - Nhiệt độ của {solvent}", fontsize=11)
+    else:
+        mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
+        mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
