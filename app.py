@@ -148,7 +148,7 @@ try:
         viscosity = CP.PropsSI("V", "T", T_K, "P", P_Pa, solvent)
         enthalpy = CP.PropsSI("H", "T", T_K, "P", P_Pa, solvent) / 1000
         
-        # Sửa mã pha cho các chất nguyên chất (trả về chuỗi ký tự ở CoolProp bản mới)
+        # Nhận diện mã pha từ thư viện CoolProp nguyên chất
         phase_str = CP.PhaseSI("T", T_K, "P", P_Pa, solvent)
         phase_dict = {
             "liquid": "Chất lỏng (Liquid)",
@@ -172,7 +172,6 @@ try:
         dielectric_const = max(1.0, epsilon_water_base)
         polarity_desc = "Phân cực mạnh (Hòa tan tốt chất vô cơ/muối/ion)"
     elif solvent == "CarbonDioxide":
-        # Áp dụng công thức thực nghiệm tính toán theo mật độ phân tử thực tế
         rho_g_cm3 = density / 1000.0
         dielectric_const = 1.0 + 0.423 * rho_g_cm3 + 0.052 * (rho_g_cm3 ** 2)
         polarity_desc = "Không phân cực (Hòa tan tốt lipid, chất béo, tinh dầu)"
@@ -219,3 +218,5 @@ try:
     else:
         mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
         mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
+        ax.plot(mix_T_crit, mix_P_crit, "go", markersize=9, label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)")
+        ax.set_title(f"Vị trí vận hành hỗn hợp Ethanol/Nước ({nong_do_percent}%)", fontsize=11)
