@@ -219,3 +219,4 @@ with col_res1:
     st.metric("Enthalpy", f"{enthalpy:.2f} kJ/kg")
 
 with col_res2:
+    st.subheader("🔍 Trạng thái Pha & Phân cực")
