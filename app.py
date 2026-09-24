@@ -1,7 +1,7 @@
 import CoolProp.CoolProp as CP
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 # Cấu hình giao diện Streamlit hiển thị tối ưu trên cả điện thoại và máy tính
@@ -59,44 +59,89 @@ def hien_thi_bang_tra_cuu(P_input, P_Pa):
         st.error(f"Lỗi tạo bảng tra cứu hỗn hợp: {e}")
 
 # =========================================================================
-# HÀM 2: VẼ ĐỒ THỊ GIẢN ĐỒ PHA ĐỘC LẬP
+# HÀM 2: VẼ GIẢN ĐỒ PHA TƯƠNG TÁC (PLOTLY) - ĐÃ KHẮC PHỤC LỖI HIỂN THỊ
 # =========================================================================
 def ve_gian_do_pha(solvent, T_input, P_input, critical_T, critical_P, t_min, t_max, p_min, p_max, w_ethanol, nong_do_percent):
-    fig, ax = plt.subplots(figsize=(6, 4.5))
+    fig = go.Figure()
 
     if solvent != "Ethanol_Water":
         try:
+            # Lấy giới hạn nhiệt độ chuẩn của chất từ CoolProp
             T_triple = CP.PropsSI("Tmin", "T", 0, "P", 0, solvent)
             T_crit = CP.PropsSI("Tcrit", "T", 0, "P", 0, solvent)
-            T_space = np.linspace(T_triple, T_crit - 0.05, 200)
-            P_sat = [CP.PropsSI("P", "T", t, "Q", 0, solvent) / 1e5 for t in T_space]
-            ax.plot(T_space - 273.15, P_sat, "r-", linewidth=2, label="Đường bão hòa Lỏng - Hơi")
-        except:
-            pass
-        ax.plot(critical_T, critical_P, "go", markersize=8, label=f"Điểm tới hạn ({critical_T:.1f}°C, {critical_P:.1f} bar)")
-        ax.set_title(f"Giản đồ Pha Áp suất - Nhiệt độ của {solvent}", fontsize=11)
+            
+            # Quét an toàn: Tránh điểm kỳ dị tại chính xác Tmin và Tcrit
+            T_space = np.linspace(T_triple + 0.1, T_crit - 0.1, 150)
+            T_degC = T_space - 273.15
+            P_sat_bar = []
+            
+            for t in T_space:
+                try:
+                    p_pa = CP.PropsSI("P", "T", t, "Q", 0, solvent)
+                    P_sat_bar.append(p_pa / 1e5)
+                except:
+                    P_sat_bar.append(None)
+            
+            # Vẽ đường bão hòa lỏng - hơi
+            fig.add_trace(go.Scatter(
+                x=T_degC, y=P_sat_bar,
+                mode='lines',
+                name='Đường bão hòa Lỏng - Hơi',
+                line=dict(color='red', width=3)
+            ))
+            
+        except Exception as e:
+            st.warning(f"Không thể dựng đường bão hòa tự động: {e}")
+            
+        # Thêm điểm tới hạn cố định của chất
+        fig.add_trace(go.Scatter(
+            x=[critical_T], y=[critical_P],
+            mode='markers+text',
+            name='Điểm tới hạn',
+            text=[f" Critical Point ({critical_T:.1f}°C, {critical_P:.1f} bar)"],
+            textposition="top right",
+            marker=dict(color='green', size=12, symbol='circle')
+        ))
     else:
+        # Đối với hỗn hợp Ethanol_Water
         mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
         mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
-        ax.plot(mix_T_crit, mix_P_crit, "go", markersize=9, label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)")
-        ax.set_title(f"Vị trí vận hành hỗn hợp Ethanol/Nước ({nong_do_percent}%)", fontsize=11)
+        fig.add_trace(go.Scatter(
+            x=[mix_T_crit], y=[mix_P_crit],
+            mode='markers+text',
+            name='Điểm tới hạn hỗn hợp',
+            text=[f" Mixture Critical Point ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)"],
+            textposition="top right",
+            marker=dict(color='green', size=12, symbol='circle')
+        ))
 
-    ax.plot(T_input, P_input, "bX", markersize=11, label="Điểm vận hành")
-    ax.axvline(x=T_input, color="gray", linestyle="--", linewidth=0.8)
-    ax.axhline(y=P_input, color="gray", linestyle="--", linewidth=0.8)
-    ax.set_xlabel("Nhiệt độ T (°C)")
-    ax.set_ylabel("Áp suất P (bar)")
-    ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="upper left", fontsize=9)
-    
-    if solvent == "Ethanol_Water":
-        ax.set_xlim(20.0, 400.0)
-        ax.set_ylim(1.0, 240.0)
-    else:
-        ax.set_xlim(t_min, t_max)
-        ax.set_ylim(p_min, p_max)
+    # Thêm điểm vận hành thực tế mà người dùng đang chọn trên thanh trượt
+    fig.add_trace(go.Scatter(
+        x=[T_input], y=[P_input],
+        mode='markers+text',
+        name='Điểm vận hành',
+        text=[" Vị trí đang chọn"],
+        textposition="bottom center",
+        marker=dict(color='blue', size=14, symbol='x')
+    ))
 
-    st.pyplot(fig)
+    # Cấu hình Layout cho đồ thị thích ứng lưới nét đứt
+    fig.update_layout(
+        title=f"Giản đồ Pha Áp suất - Nhiệt độ ({solvent if solvent != 'Ethanol_Water' else 'Hỗn hợp'})",
+        xaxis_title="Nhiệt độ T (°C)",
+        yaxis_title="Áp suất P (bar)",
+        xaxis=dict(range=[t_min, t_max], gridcolor='rgba(200,200,200,0.4)', showgrid=True),
+        yaxis=dict(range=[p_min, p_max], gridcolor='rgba(200,200,200,0.4)', showgrid=True),
+        template="plotly_white",
+        hovermode="closest",
+        height=500
+    )
+
+    # Đưa đường nét đứt định vị điểm vận hành vào đồ thị
+    fig.add_vline(x=T_input, line_width=1, line_dash="dash", line_color="gray")
+    fig.add_hline(y=P_input, line_width=1, line_dash="dash", line_color="gray")
+
+    st.plotly_chart(fig, use_container_width=True)
 
 
 # =========================================================================
@@ -117,24 +162,24 @@ if solvent == "Ethanol_Water":
     nong_do_percent = st.slider("Nồng độ Ethanol trong hỗn hợp (% khối lượng):", min_value=0.0, max_value=100.0, value=70.0, step=1.0)
     w_ethanol = nong_do_percent / 100.0
     w_water = 1.0 - w_ethanol
-    t_min, t_max, t_default = 20.0, 250.0, 150.0
-    p_min, p_max, p_default = 1.0, 150.0, 25.0
+    t_min, t_max, t_default = 20.0, 400.0, 150.0
+    p_min, p_max, p_default = 1.0, 240.0, 25.0
     critical_T = 373.95 - (373.95 - 240.75) * w_ethanol
     critical_P = 220.64 - (220.64 - 61.48) * w_ethanol
 else:
     if solvent == "CarbonDioxide":
-        t_min, t_max, t_default = 20.0, 100.0, 27.98
-        p_min, p_max, p_default = 50.0, 500.0, 79.91
+        t_min, t_max, t_default = -20.0, 100.0, 35.0
+        p_min, p_max, p_default = 1.0, 300.0, 80.0
         critical_T = 31.06
         critical_P = 73.77
     else:
-        t_min, t_max, t_default = 25.0, 370.0, 150.0
+        t_min, t_max, t_default = 25.0, 400.0, 150.0
         p_min, p_max, p_default = 1.0, 250.0, 15.0
         critical_T = 373.95
         critical_P = 220.64
 
-T_input = st.slider("Nhiệt độ vận hành (°C):", min_value=t_min, max_value=t_max, value=t_default)
-P_input = st.slider("Áp suất vận hành (bar):", min_value=p_min, max_value=p_max, value=p_default)
+T_input = st.slider("Nhiệt độ vận hành (°C):", min_value=float(t_min), max_value=float(t_max), value=float(t_default))
+P_input = st.slider("Áp suất vận hành (bar):", min_value=float(p_min), max_value=float(p_max), value=float(p_default))
 
 T_K = T_input + 273.15
 P_Pa = P_input * 1e5
@@ -183,40 +228,3 @@ else:
             phase_str = CP.PhaseSI("T", T_K, "P", P_Pa, solvent)
             phase_dict = {
                 "liquid": "Chất lỏng (Liquid)",
-                "gas": "Pha khí (Gas)",
-                "twophase": "Vùng lưỡng pha Lỏng - Hơi (Two-Phase)",
-                "supercritical": "Trạng thái Siêu tới hạn (Supercritical)",
-                "supercritical_liquid": "Chất lỏng siêu tới hạn (Supercritical Liquid)",
-                "supercritical_gas": "Khí siêu tới hạn (Supercritical Gas)"
-            }
-            phase_vn = phase_dict.get(phase_str, f"Pha: {phase_str}")
-        except:
-            phase_vn = "Siêu tới hạn / Cận tới hạn đặc biệt"
-            
-        if solvent == "Water":
-            # Công thức thực nghiệm tính hằng số điện môi của nước theo T
-            dielectric_const = 87.74 - 0.4008 * T_input + 9.398e-4 * (T_input**2) - 1.41e-6 * (T_input**3)
-            dielectric_const = max(1.0, dielectric_const)
-    except Exception as e:
-        st.error(f"Lỗi tính toán thuộc tính của {solvent}: {e}")
-
-# Đánh giá độ phân cực dựa trên hằng số điện môi
-if dielectric_const > 50:
-    polarity_desc = "Phân cực mạnh (Strongly Polar)"
-elif 20 <= dielectric_const <= 50:
-    polarity_desc = "Phân cực trung bình (Moderately Polar)"
-else:
-    polarity_desc = "Kém phân cực / Không phân cực (Non-polar / Weakly Polar)"
-
-# Hiển thị kết quả ra màn hình UI
-st.write("---")
-st.header("📊 Kết quả thuộc tính nhiệt động")
-
-col_res1, col_res2 = st.columns(2)
-with col_res1:
-    st.metric("Khối lượng riêng (Density)", f"{density:.2f} kg/m³")
-    st.metric("Độ nhớt động lực (Viscosity)", f"{viscosity*1e6:.3f} μPa·s")
-    st.metric("Enthalpy", f"{enthalpy:.2f} kJ/kg")
-
-with col_res2:
-    st.subheader("🔍 Trạng thái Pha & Phân cực")
