@@ -67,7 +67,7 @@ def hien_thi_bang_tra_cuu(P_input, P_Pa):
 
 
 # =========================================================================
-# HÀM 2: VẼ ĐỒ THỊ GIẢN ĐỒ PHA ĐỘC LẬP (ĐÃ TÁCH KHỎI KHỐI TOÁN PHỨC TẠP)
+# HÀM 2: VẼ ĐỒ THỊ GIẢN ĐỒ PHA ĐỘC LẬP
 # =========================================================================
 def ve_gian_do_pha(solvent, T_input, P_input, critical_T, critical_P, t_min, t_max, p_min, p_max, w_ethanol, nong_do_percent):
     fig, ax = plt.subplots(figsize=(6, 4.5))
@@ -86,7 +86,7 @@ def ve_gian_do_pha(solvent, T_input, P_input, critical_T, critical_P, t_min, t_m
     else:
         mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
         mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
-        ax.plot(mix_T_crit, mix_P_crit, "go", markersize=9, label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)")
+        ax.plot(mix_T_crit, mix_P_crit, "go", markersize=9, label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, mix_P_crit bar)")
         ax.set_title(f"Vị trí vận hành hỗn hợp Ethanol/Nước ({nong_do_percent}%)", fontsize=11)
 
     ax.plot(T_input, P_input, "bX", markersize=11, label="Điểm vận hành")
@@ -149,12 +149,13 @@ P_input = st.slider("Áp suất vận hành (bar):", min_value=p_min, max_value=
 T_K = T_input + 273.15
 P_Pa = P_input * 1e5
 
-# Khởi tạo các giá trị đầu ra mặc định đề phòng lỗi tính toán
-density, viscosity, enthalpy, phase_vn = 0.0, 0.0, 0.0, "Không xác định"
+# Khởi tạo các biến đầu ra ngăn lỗi phân nhánh
+density, viscosity, enthalpy = 0.0, 0.0, 0.0
+phase_vn = "Chưa xác định"
 dielectric_const, polarity_desc = 1.0, "Chưa xác định"
 
 # =========================================================================
-# 4. KHỐI TÍNH TOÁN NHIỆT ĐỘNG LỰC HỌC (TRY-EXCEPT ĐƠN GIẢN, KHÔNG LỒNG NHAU)
+# 4. KHỐI TÍNH TOÁN NHIỆT ĐỘNG LỰC HỌC (AN TOÀN TUYỆT ĐỐI)
 # =========================================================================
 try:
     if solvent == "Ethanol_Water":
