@@ -12,7 +12,7 @@ st.caption("Phát triển bởi TS. Hồ Công Trực")
 
 
 # =========================================================================
-# HÀM ĐỘC LẬP: TÍNH TOÁN VÀ HIỂN THỊ BẢNG TRA CỨU
+# HÀM 1: TÍNH TOÁN VÀ HIỂN THỊ BẢNG TRA CỨU CHO HỖN HỢP
 # =========================================================================
 def hien_thi_bang_tra_cuu(P_input, P_Pa):
     st.write("---")
@@ -38,18 +38,14 @@ def hien_thi_bang_tra_cuu(P_input, P_Pa):
             
             try:
                 state_vle.set_mass_fractions([w_e_t, w_w_t])
-                
-                # 1. Tính điểm sôi (Bubble point)
                 state_vle.update(CP.PQ_INPUTS, P_Pa, 0.0)
                 T_b = state_vle.T() - 273.15
                 col_bubble.append(f"{T_b:.2f} °C")
                 
-                # 2. Tính điểm sương (Dew point)
                 state_vle.update(CP.PQ_INPUTS, P_Pa, 1.0)
                 T_d = state_vle.T() - 273.15
                 col_dew.append(f"{T_d:.2f} °C")
                 
-                # 3. Tính hằng số điện môi tại điểm sôi
                 v_e_t = (w_e_t / 0.789) / ((w_e_t / 0.789) + (w_w_t / 1.0))
                 eps_mix_table = max(1.0, v_e_t * (24.30 - 0.130 * (T_b - 25.0)) + (1.0 - v_e_t) * (78.54 - 0.360 * (T_b - 25.0)))
                 col_eps.append(f"{eps_mix_table:.2f}")
@@ -71,39 +67,75 @@ def hien_thi_bang_tra_cuu(P_input, P_Pa):
 
 
 # =========================================================================
-# 1. THANH ĐIỀU KHIỂN & NHẬP THÔNG SỐ VẬN HÀNH
+# HÀM 2: VẼ ĐỒ THỊ GIẢN ĐỒ PHA ĐỘC LẬP (ĐÃ TÁCH KHỎI KHỐI TOÁN PHỨC TẠP)
+# =========================================================================
+def ve_gian_do_pha(solvent, T_input, P_input, critical_T, critical_P, t_min, t_max, p_min, p_max, w_ethanol, nong_do_percent):
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+
+    if solvent != "Ethanol_Water":
+        try:
+            T_triple = CP.PropsSI("Tmin", "T", 0, "P", 0, solvent)
+            T_crit = CP.PropsSI("Tcrit", "T", 0, "P", 0, solvent)
+            T_space = np.linspace(T_triple, T_crit - 0.05, 200)
+            P_sat = [CP.PropsSI("P", "T", t, "Q", 0, solvent) / 1e5 for t in T_space]
+            ax.plot(T_space - 273.15, P_sat, "r-", linewidth=2, label="Đường bão hòa Lỏng - Hơi")
+        except:
+            pass
+        ax.plot(critical_T, critical_P, "go", markersize=8, label=f"Điểm tới hạn ({critical_T:.1f}°C, {critical_P:.1f} bar)")
+        ax.set_title(f"Giản đồ Pha Áp suất - Nhiệt độ của {solvent}", fontsize=11)
+    else:
+        mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
+        mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
+        ax.plot(mix_T_crit, mix_P_crit, "go", markersize=9, label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)")
+        ax.set_title(f"Vị trí vận hành hỗn hợp Ethanol/Nước ({nong_do_percent}%)", fontsize=11)
+
+    ax.plot(T_input, P_input, "bX", markersize=11, label="Điểm vận hành")
+    ax.axvline(x=T_input, color="gray", linestyle="--", linewidth=0.8)
+    ax.axhline(y=P_input, color="gray", linestyle="--", linewidth=0.8)
+    ax.set_xlabel("Nhiệt độ T (°C)")
+    ax.set_ylabel("Áp suất P (bar)")
+    ax.grid(True, linestyle=":", alpha=0.6)
+    ax.legend(loc="upper left", fontsize=9)
+    
+    if solvent == "Ethanol_Water":
+        ax.set_xlim(20.0, 400.0)
+        ax.set_ylim(1.0, 240.0)
+    else:
+        ax.set_xlim(t_min, t_max)
+        ax.set_ylim(p_min, p_max)
+
+    st.pyplot(fig)
+
+
+# =========================================================================
+# 3. GIAO DIỆN THANH ĐIỀU KHIỂN & NHẬP THÔNG SỐ VẬN HÀNH
 # =========================================================================
 st.header("⚙️ Thông số vận hành")
 
 solvent = st.selectbox(
     "Chọn dung môi trích ly:",
     options=["CarbonDioxide", "Water", "Ethanol_Water"],
-    format_func=lambda x: "1. CO2 (Trích ly siêu tới hạn - SFE)"
-    if x == "CarbonDioxide"
-    else (
-        "2. Nước (Trích ly cận tới hạn - SWE)"
-        if x == "Water"
-        else "3. Hỗn hợp Ethanol & Nước (Chất lỏng siêu áp)"
-    ),
+    format_func=lambda x: "1. CO2 (Trích ly siêu tới hạn - SFE)" if x == "CarbonDioxide"
+    else ("2. Nước (Trích ly cận tới hạn - SWE)" if x == "Water" else "3. Hỗn hợp Ethanol & Nước (Chất lỏng siêu áp)"),
 )
 
+w_ethanol = 0.0
+w_water = 1.0
+nong_do_percent = 0.0
+
 if solvent == "Ethanol_Water":
-    nong_do_percent = st.slider(
-        "Nồng độ Ethanol trong hỗn hợp (% khối lượng):",
-        min_value=0.0,
-        max_value=100.0,
-        value=70.0,
-        step=1.0,
-    )
+    nong_do_percent = st.slider("Nồng độ Ethanol trong hỗn hợp (% khối lượng):", min_value=0.0, max_value=100.0, value=70.0, step=1.0)
     w_ethanol = nong_do_percent / 100.0
     w_water = 1.0 - w_ethanol
     t_min, t_max, t_default = 20.0, 250.0, 150.0
     p_min, p_max, p_default = 1.0, 150.0, 25.0
+    critical_T = 373.95 - (373.95 - 240.75) * w_ethanol
+    critical_P = 220.64 - (220.64 - 61.48) * w_ethanol
 else:
     if solvent == "CarbonDioxide":
         t_min, t_max, t_default = 20.0, 100.0, 45.0
         p_min, p_max, p_default = 50.0, 500.0, 250.0
-        critical_T = 31.06  # Giá trị chuẩn NIST cho CO2
+        critical_T = 31.06
         critical_P = 73.77
     else:
         t_min, t_max, t_default = 25.0, 370.0, 150.0
@@ -117,8 +149,12 @@ P_input = st.slider("Áp suất vận hành (bar):", min_value=p_min, max_value=
 T_K = T_input + 273.15
 P_Pa = P_input * 1e5
 
+# Khởi tạo các giá trị đầu ra mặc định đề phòng lỗi tính toán
+density, viscosity, enthalpy, phase_vn = 0.0, 0.0, 0.0, "Không xác định"
+dielectric_const, polarity_desc = 1.0, "Chưa xác định"
+
 # =========================================================================
-# 2. XỬ LÝ TOÁN NHIỆT ĐỘNG
+# 4. KHỐI TÍNH TOÁN NHIỆT ĐỘNG LỰC HỌC (TRY-EXCEPT ĐƠN GIẢN, KHÔNG LỒNG NHAU)
 # =========================================================================
 try:
     if solvent == "Ethanol_Water":
@@ -129,7 +165,6 @@ try:
         viscosity = state.viscosity()
         enthalpy = state.hmass() / 1000
         
-        # Xác định pha cho hỗn hợp nhị phân
         try:
             p_idx = state.phase()
             phase_dict = {
@@ -148,7 +183,6 @@ try:
         viscosity = CP.PropsSI("V", "T", T_K, "P", P_Pa, solvent)
         enthalpy = CP.PropsSI("H", "T", T_K, "P", P_Pa, solvent) / 1000
         
-        # Nhận diện mã pha từ thư viện CoolProp nguyên chất
         phase_str = CP.PhaseSI("T", T_K, "P", P_Pa, solvent)
         phase_dict = {
             "liquid": "Chất lỏng (Liquid)",
@@ -164,7 +198,7 @@ try:
         if solvent == "Water" and T_input >= 100 and T_input < critical_T and "liquid" in phase_str.lower():
             phase_vn = "Nước cận tới hạn (Subcritical Hot Water - SWE)"
 
-    # --- TÍNH HẰNG SỐ ĐIỆN MÔI CHUẨN XÁC ---
+    # --- TÍNH HẰNG SỐ ĐIỆN MÔI ---
     epsilon_water_base = 78.54 - 0.360 * (T_input - 25.0)
     epsilon_ethanol_base = 24.30 - 0.130 * (T_input - 25.0)
 
@@ -185,38 +219,4 @@ try:
         else:
             polarity_desc = "Phân cực yếu (Hệ dung môi chứa nhiều cồn)"
 
-    # =========================================================================
-    # 3. HIỂN THỊ KẾT QUẢ ĐẸP MẮT
-    # =========================================================================
-    st.subheader("📊 Kết quả tính toán trạng thái")
-    st.info(f"**Trạng thái pha:** {phase_vn}")
-    st.warning(f"⚡ **Tính chất phân cực:** Hằng số điện môi $\\varepsilon$ = {dielectric_const:.2f} | {polarity_desc}")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric(label="Khối lượng riêng (Density)", value=f"{density:.1f} kg/m³")
-        st.metric(label="Độ nhớt (Viscosity)", value=f"{viscosity * 1e6:.3f} x 10⁻⁶ Pa·s")
-    with col2:
-        st.metric(label="Enthalpy hỗn hợp", value=f"{enthalpy:.1f} kJ/kg")
-        st.metric(label="Điểm vận hành thực tế", value=f"{T_input}°C, {P_input} bar")
-
-    # =========================================================================
-    # 4. VẼ ĐỒ THỊ GIẢN ĐỒ PHA TRỰC QUAN
-    # =========================================================================
-    st.subheader("📈 Giản đồ pha trực quan")
-    fig, ax = plt.subplots(figsize=(6, 4.5))
-
-    if solvent != "Ethanol_Water":
-        T_triple = CP.PropsSI("Tmin", "T", 0, "P", 0, solvent)
-        T_crit = CP.PropsSI("Tcrit", "T", 0, "P", 0, solvent)
-        T_space = np.linspace(T_triple, T_crit - 0.05, 200)
-        P_sat = [CP.PropsSI("P", "T", t, "Q", 0, solvent) / 1e5 for t in T_space]
-        
-        ax.plot(T_space - 273.15, P_sat, "r-", linewidth=2, label="Đường bão hòa Lỏng - Hơi")
-        ax.plot(critical_T, critical_P, "go", markersize=8, label=f"Điểm tới hạn ({critical_T:.1f}°C, {critical_P:.1f} bar)")
-        ax.set_title(f"Giản đồ Pha Áp suất - Nhiệt độ của {solvent}", fontsize=11)
-    else:
-        mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
-        mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
-        ax.plot(mix_T_crit, mix_P_crit, "go", markersize=9, label=f"Điểm tới hạn hỗn hợp ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)")
-        ax.set_title(f"Vị trí vận hành hỗn hợp Ethanol/Nước ({nong_do_percent}%)", fontsize=11)
+except Exception as calculation_error:
