@@ -59,7 +59,7 @@ def hien_thi_bang_tra_cuu(P_input, P_Pa):
         st.error(f"Lỗi tạo bảng tra cứu hỗn hợp: {e}")
 
 # =========================================================================
-# HÀM 2: VẼ ĐỒ THỊ GIẢN ĐỒ PHA ĐỘC LẬP
+# HÀM 2: VẼ ĐỒ THỊ GIẢN ĐỒ PHA ĐỘC LẬP (ĐÃ ĐƯỢC CHUẨN HÓA CHO STREAMLIT)
 # =========================================================================
 def ve_gian_do_pha(solvent, T_input, P_input, critical_T, critical_P, t_min, t_max, p_min, p_max, w_ethanol, nong_do_percent):
     fig, ax = plt.subplots(figsize=(6, 4.5))
@@ -96,6 +96,7 @@ def ve_gian_do_pha(solvent, T_input, P_input, critical_T, critical_P, t_min, t_m
         ax.set_xlim(t_min, t_max)
         ax.set_ylim(p_min, p_max)
 
+    # Đảm bảo hiển thị hình ảnh tường minh qua đối tượng fig
     st.pyplot(fig)
 
 
@@ -146,7 +147,7 @@ dielectric_const, polarity_desc = 1.0, "Chưa xác định"
 
 
 # =========================================================================
-# 4. LUỒNG TÍNH TOÁN PHẲNG (KHÔNG SỬ DỤNG KHỐI TRY-EXCEPT TOÀN CỤC)
+# 4. LUỒNG TÍNH TOÁN PHẲNG
 # =========================================================================
 if solvent == "Ethanol_Water":
     try:
@@ -192,7 +193,7 @@ else:
     except Exception as e:
         st.error(f"Lỗi tính toán dữ liệu chất nguyên chất từ CoolProp: {e}")
 
-# --- TÍNH HẰNG SỐ ĐIỆN MÔI (NẰM NGOÀI TRY-EXCEPT LỚN) ---
+# --- TÍNH HẰNG SỐ ĐIỆN MÔI ---
 epsilon_water_base = 78.54 - 0.360 * (T_input - 25.0)
 epsilon_ethanol_base = 24.30 - 0.130 * (T_input - 25.0)
 
