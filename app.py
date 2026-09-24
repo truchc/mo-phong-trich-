@@ -11,7 +11,7 @@ st.title("🔬 Công Cụ Nhiệt Động Lực Học Dung Môi Siêu Tới Hạ
 st.caption("Phát triển bởi TS. Hồ Công Trực")
 
 # =========================================================================
-# HÀM 1: TÍNH TOÁN VÀ HIỂN THỊ BẢNG TRA CỨU CHO HỒN HỢP
+# HÀM 1: TÍNH TOÁN VÀ HIỂN THỊ BẢNG TRA CỨU CHO HỖN HỢP
 # =========================================================================
 def hien_thi_bang_tra_cuu(P_input, P_Pa):
     st.write("---")
@@ -98,85 +98,9 @@ def ve_gian_do_pha(solvent, T_input, P_input, critical_T, critical_P, t_min, t_m
 
     st.pyplot(fig)
 
-# =========================================================================
-# HÀM 3: XỬ LÝ TOÁN NHIỆT ĐỘNG LỰC HỌC CHUYÊN BIỆT (KHÔNG DÙNG TRY-EXCEPT TOÀN CỤC)
-# =========================================================================
-def tinh_toan_nhiet_dong(solvent, T_K, P_Pa, T_input, P_input, w_ethanol, w_water, critical_T):
-    res = {
-        "density": 0.0, "viscosity": 0.0, "enthalpy": 0.0,
-        "phase_vn": "Chưa xác định", "dielectric_const": 1.0, "polarity_desc": "Chưa xác định"
-    }
-    
-    try:
-        if solvent == "Ethanol_Water":
-            state = CP.AbstractState("HEOS", "Ethanol&Water")
-            state.set_mass_fractions([w_ethanol, w_water])
-            state.update(CP.PT_INPUTS, P_Pa, T_K)
-            res["density"] = state.rhomass()
-            res["viscosity"] = state.viscosity()
-            res["enthalpy"] = state.hmass() / 1000
-            
-            try:
-                p_idx = state.phase()
-                phase_dict = {
-                    CP.iphase_liquid: "Chất lỏng dưới hạn / Áp suất cao (Compressed Liquid Mixture)",
-                    CP.iphase_gas: "Pha khí (Gas Mixture)",
-                    CP.iphase_twophase: "Vùng lưỡng pha Lỏng - Hơi (VLE - Two Phase)",
-                    CP.iphase_supercritical: "Hỗn hợp trạng thái Siêu tới hạn (Supercritical Mixture)",
-                    CP.iphase_supercritical_liquid: "Chất lỏng siêu tới hạn (Supercritical Liquid)",
-                    CP.iphase_supercritical_gas: "Khí siêu tới hạn (Supercritical Gas)"
-                }
-                res["phase_vn"] = phase_dict.get(p_idx, "Không xác định rõ pha")
-            except:
-                res["phase_vn"] = "Chất lỏng hỗn hợp nén áp suất"
-        else:
-            res["density"] = CP.PropsSI("D", "T", T_K, "P", P_Pa, solvent)
-            res["viscosity"] = CP.PropsSI("V", "T", T_K, "P", P_Pa, solvent)
-            res["enthalpy"] = CP.PropsSI("H", "T", T_K, "P", P_Pa, solvent) / 1000
-            
-            phase_str = CP.PhaseSI("T", T_K, "P", P_Pa, solvent)
-            phase_dict = {
-                "liquid": "Chất lỏng (Liquid)",
-                "supercritical_fluid": "Siêu tới hạn (Supercritical Fluid)",
-                "supercritical_liquid": "Chất lỏng siêu tới hạn (Supercritical Liquid)",
-                "supercritical_gas": "Khí siêu tới hạn (Supercritical Gas)",
-                "gas": "Pha Khí (Gas)",
-                "twophase": "Vùng lưỡng pha (Vapor-Liquid Region)",
-                "subcritical": "Cận tới hạn (Subcritical)"
-            }
-            res["phase_vn"] = phase_dict.get(phase_str, f"Mã pha: {phase_str}")
-            
-            if solvent == "Water" and T_input >= 100 and T_input < critical_T and "liquid" in phase_str.lower():
-                res["phase_vn"] = "Nước cận tới hạn (Subcritical Hot Water - SWE)"
-
-        # Tính hằng số điện môi
-        epsilon_water_base = 78.54 - 0.360 * (T_input - 25.0)
-        epsilon_ethanol_base = 24.30 - 0.130 * (T_input - 25.0)
-
-        if solvent == "Water":
-            res["dielectric_const"] = max(1.0, epsilon_water_base)
-            res["polarity_desc"] = "Phân cực mạnh (Hòa tan tốt chất vô cơ/muối/ion)"
-        elif solvent == "CarbonDioxide":
-            rho_g_cm3 = res["density"] / 1000.0
-            res["dielectric_const"] = 1.0 + 0.423 * rho_g_cm3 + 0.052 * (rho_g_cm3 ** 2)
-            res["polarity_desc"] = "Không phân cực (Hòa tan tốt lipid, chất béo, tinh dầu)"
-        else:
-            v_eth = (w_ethanol / 0.789) / ((w_ethanol / 0.789) + (w_water / 1.0))
-            res["dielectric_const"] = max(1.0, v_eth * epsilon_ethanol_base + (1.0 - v_eth) * epsilon_water_base)
-            if res["dielectric_const"] > 50:
-                res["polarity_desc"] = "Phân cực mạnh (Hệ dung môi chứa nhiều nước)"
-            elif res["dielectric_const"] > 35:
-                res["polarity_desc"] = "Phân cực trung bình (Vùng tối ưu trích hoạt chất hữu cơ)"
-            else:
-                res["polarity_desc"] = "Phân cực yếu (Hệ dung môi chứa nhiều cồn)"
-                
-    except Exception as e:
-        st.error(f"⚠️ Vùng vận hành vượt quá giới hạn mô phỏng của thư viện thực nghiệm. Chi tiết: {e}")
-        
-    return res
 
 # =========================================================================
-# 4. GIAO DIỆN CHÍNH STREAMLIT
+# 1. GIAO DIỆN KHỞI TẠO ĐẦU VÀO (XUẤT HIỆN TRƯỚC)
 # =========================================================================
 st.header("⚙️ Thông số vận hành")
 
@@ -199,4 +123,92 @@ if solvent == "Ethanol_Water":
     critical_P = 220.64 - (220.64 - 61.48) * w_ethanol
 else:
     if solvent == "CarbonDioxide":
-        t_min, t_max, t_default = 20.0, 100.0, 45.0
+        t_min, t_max, t_default = 20.0, 100.0, 27.98   # Mặc định thông số như trong hình của bạn
+        p_min, p_max, p_default = 50.0, 500.0, 79.91   # Mặc định thông số như trong hình của bạn
+        critical_T = 31.06
+        critical_P = 73.77
+    else:
+        t_min, t_max, t_default = 25.0, 370.0, 150.0
+        p_min, p_max, p_default = 1.0, 250.0, 15.0
+        critical_T = 373.95
+        critical_P = 220.64
+
+T_input = st.slider("Nhiệt độ vận hành (°C):", min_value=t_min, max_value=t_max, value=t_default)
+P_input = st.slider("Áp suất vận hành (bar):", min_value=p_min, max_value=p_max, value=p_default)
+
+T_K = T_input + 273.15
+P_Pa = P_input * 1e5
+
+# Khởi tạo các biến chứa kết quả
+density, viscosity, enthalpy = 0.0, 0.0, 0.0
+phase_vn = "Chưa xác định"
+dielectric_const, polarity_desc = 1.0, "Chưa xác định"
+
+
+# =========================================================================
+# 2. KHỐI TÍNH TOÁN TUẦN TỰ (ĐẢM BẢO CHẠY SAU KHI CÓ ĐẦU VÀO)
+# =========================================================================
+try:
+    if solvent == "Ethanol_Water":
+        state = CP.AbstractState("HEOS", "Ethanol&Water")
+        state.set_mass_fractions([w_ethanol, w_water])
+        state.update(CP.PT_INPUTS, P_Pa, T_K)
+        density = state.rhomass()
+        viscosity = state.viscosity()
+        enthalpy = state.hmass() / 1000
+        
+        try:
+            p_idx = state.phase()
+            phase_dict = {
+                CP.iphase_liquid: "Chất lỏng dưới hạn / Áp suất cao (Compressed Liquid Mixture)",
+                CP.iphase_gas: "Pha khí (Gas Mixture)",
+                CP.iphase_twophase: "Vùng lưỡng pha Lỏng - Hơi (VLE - Two Phase)",
+                CP.iphase_supercritical: "Hỗn hợp trạng thái Siêu tới hạn (Supercritical Mixture)",
+                CP.iphase_supercritical_liquid: "Chất lỏng siêu tới hạn (Supercritical Liquid)",
+                CP.iphase_supercritical_gas: "Khí siêu tới hạn (Supercritical Gas)"
+            }
+            phase_vn = phase_dict.get(p_idx, "Không xác định rõ pha")
+        except:
+            phase_vn = "Chất lỏng hỗn hợp nén áp suất"
+    else:
+        density = CP.PropsSI("D", "T", T_K, "P", P_Pa, solvent)
+        viscosity = CP.PropsSI("V", "T", T_K, "P", P_Pa, solvent)
+        enthalpy = CP.PropsSI("H", "T", T_K, "P", P_Pa, solvent) / 1000
+        
+        phase_str = CP.PhaseSI("T", T_K, "P", P_Pa, solvent)
+        phase_dict = {
+            "liquid": "Chất lỏng (Liquid)",
+            "supercritical_fluid": "Siêu tới hạn (Supercritical Fluid)",
+            "supercritical_liquid": "Chất lỏng siêu tới hạn (Supercritical Liquid)",
+            "supercritical_gas": "Khí siêu tới hạn (Supercritical Gas)",
+            "gas": "Pha Khí (Gas)",
+            "twophase": "Vùng lưỡng pha (Vapor-Liquid Region)",
+            "subcritical": "Cận tới hạn (Subcritical)"
+        }
+        phase_vn = phase_dict.get(phase_str, f"Mã pha: {phase_str}")
+        
+        if solvent == "Water" and T_input >= 100 and T_input < critical_T and "liquid" in phase_str.lower():
+            phase_vn = "Nước cận tới hạn (Subcritical Hot Water - SWE)"
+
+    # --- TÍNH HẰNG SỐ ĐIỆN MÔI ---
+    epsilon_water_base = 78.54 - 0.360 * (T_input - 25.0)
+    epsilon_ethanol_base = 24.30 - 0.130 * (T_input - 25.0)
+
+    if solvent == "Water":
+        dielectric_const = max(1.0, epsilon_water_base)
+        polarity_desc = "Phân cực mạnh (Hòa tan tốt chất vô cơ/muối/ion)"
+    elif solvent == "CarbonDioxide":
+        rho_g_cm3 = density / 1000.0
+        dielectric_const = 1.0 + 0.423 * rho_g_cm3 + 0.052 * (rho_g_cm3 ** 2)
+        polarity_desc = "Không phân cực (Hòa tan tốt lipid, chất béo, tinh dầu)"
+    else:
+        v_eth = (w_ethanol / 0.789) / ((w_ethanol / 0.789) + (w_water / 1.0))
+        dielectric_const = max(1.0, v_eth * epsilon_ethanol_base + (1.0 - v_eth) * epsilon_water_base)
+        if dielectric_const > 50:
+            polarity_desc = "Phân cực mạnh (Hệ dung môi chứa nhiều nước)"
+        elif dielectric_const > 35:
+            polarity_desc = "Phân cực trung bình (Vùng tối ưu trích hoạt chất hữu cơ)"
+        else:
+            polarity_desc = "Phân cực yếu (Hệ dung môi chứa nhiều cồn)"
+
+except Exception as e:
