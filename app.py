@@ -42,7 +42,7 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN (ĐÃ TỐI ƯU HÓA KHÔNG BỊ HIỆN N/A KHI CHUYỂN PHA) ---
+# --- HÀM TÍNH TOÁN ---
 def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
     T_kelvin = T_celsius + 273.15
     P_pascal = P_mpa * 1e6
@@ -56,7 +56,6 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
             status = "Cận tới hạn (Pha Lỏng)"
         else:
             status = "Pha Hơi / Quá nhiệt"
-            # Nếu yêu cầu lọc chế độ lưới đồ thị lỏng thì mới ẩn đi
             if filter_liquid:
                 return np.nan, np.nan, np.nan, status
                 
@@ -64,7 +63,7 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
     except:
         return np.nan, np.nan, np.nan, "Ngoài dải tính toán"
 
-# Tính toán giá trị thực tế tại điểm chọn
+# Tính toán giá trị tại điểm chọn
 rho_work, h_work, s_work, status_work = calculate_properties(T_work, P_work, fluid_string, filter_liquid=False)
 
 # --- HIỂN THỊ THÔNG SỐ ---
@@ -78,7 +77,7 @@ with col_m1:
     if "Pha Lỏng" in status_work:
         st.success(f"**Trạng thái hệ thống:** {status_work}")
     else:
-        st.error(f"**Trạng thái hệ thống:** {status_work} (Áp suất thấp gây hóa hơi)")
+        st.warning(f"**Trạng thái hệ thống:** {status_work}")
 
 with col_m2:
     st.write("### 🚨 Thông số giới hạn tới hạn tương ứng:")
@@ -97,8 +96,9 @@ T_mesh, P_mesh = np.meshgrid(T_range, P_range)
 Rho_mesh = np.zeros_like(T_mesh)
 H_mesh = np.zeros_like(T_mesh)
 
-for i in range(P_mesh.shape):
-    for j in range(P_mesh.shape):
+# ĐÃ SỬA LỖI SHAPE Ở ĐÂY
+for i in range(P_mesh.shape[0]):
+    for j in range(P_mesh.shape[1]):
         rho, h, _, status = calculate_properties(T_mesh[i, j], P_mesh[i, j], fluid_string, filter_liquid=True)
         Rho_mesh[i, j] = rho
         H_mesh[i, j] = h
@@ -113,13 +113,11 @@ with plot_col1:
     surf1 = ax1.plot_surface(T_mesh, P_mesh, Rho_mesh, cmap='viridis_r', edgecolor='none', alpha=0.6)
     
     if not np.isnan(rho_work):
-        ax1.scatter(T_work, P_work, rho_work, color='red', s=120, label='Điểm làm việc hiện tại', zorder=5)
+        ax1.scatter(T_work, P_work, rho_work, color='red', s=120, label='Điểm làm việc', zorder=5)
     
     ax1.set_xlabel("Nhiệt độ (°C)")
     ax1.set_ylabel("Áp suất (MPa)")
     ax1.set_zlabel("Mật độ (kg/m³)")
-    ax1.set_xlim(20, t_plot_max)
-    ax1.set_ylim(0, p_plot_max)
     st.pyplot(fig1)
 
 with plot_col2:
