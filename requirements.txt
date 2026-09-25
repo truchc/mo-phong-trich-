@@ -2,3 +2,5 @@ CoolProp
 numpy
 matplotlib
 tabulate
+pandas
+openpyxl
