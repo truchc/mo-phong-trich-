@@ -17,8 +17,8 @@ fluid_type = st.sidebar.selectbox(
 )
 
 if fluid_type == "1. Nước cận tới hạn (Thuần túy)":
-    T_work = st.sidebar.slider("Nhiệt độ làm việc T (°C)", 100.0, 374.0, 211.0, step=1.0)
-    P_work = st.sidebar.slider("Áp suất làm việc P (MPa)", 0.1, 22.0, 2.50, step=0.05)
+    T_work = st.sidebar.slider("Nhiệt độ làm việc T (°C)", 100.0, 374.0, 250.0, step=1.0)
+    P_work = st.sidebar.slider("Áp suất làm việc P (MPa)", 0.1, 22.0, 10.00, step=0.05)
     eth_pct = 0.0
     fluid_string = "Water"
     T_critical = 373.946  
@@ -43,7 +43,7 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN (ĐÃ KHẮC PHỤC CHÍNH XÁC BIÊN PHA VẬT LÝ) ---
+# --- HÀM TÍNH TOÁN (ĐÃ CHUẨN HÓA KIỂM TRA TRẠNG THÁI PHA) ---
 def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
     T_kelvin = T_celsius + 273.15
     P_pascal = P_mpa * 1e6
@@ -53,21 +53,21 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
         h = CP.PropsSI('H', 'T', T_kelvin, 'P', P_pascal, fluid_str) / 1000
         s = CP.PropsSI('S', 'T', T_kelvin, 'P', P_pascal, fluid_str) / 1000
         
-        # Xác định áp suất bão hòa vật lý tại nhiệt độ khảo sát để phân tách pha chính xác
+        # Sử dụng thuộc tính PhaseSI gốc của thư viện và bẫy lỗi P_sat đồng thời
+        phase_id = CP.PhaseSI('T', T_kelvin, 'P', P_pascal, fluid_str)
+        
         try:
-            P_sat = CP.PropsSI('P', 'T', T_kelvin, 'Q', 0, fluid_str) / 1e6 # Đơn vị MPa
+            P_sat = CP.PropsSI('P', 'T', T_kelvin, 'Q', 0, fluid_str) / 1e6
         except:
-            # Nếu vượt quá nhiệt độ tới hạn, hệ chuyển sang trạng thái siêu tới hạn (không có áp suất bão hòa cố định)
             P_sat = 0.0
-            
-        # Kiểm tra trạng thái thực tế dựa trên ranh giới áp suất bão hòa vật lý
+
+        # Xác định trạng thái dựa trên tích hợp mã pha tiêu chuẩn quốc tế
         if T_celsius >= T_critical:
             status = "Siêu tới hạn (Supercritical Fluid)"
-        elif P_mpa >= P_sat:
+        elif phase_id in [CP.iphase_liquid, CP.iphase_supercritical_liquid] or (P_sat > 0 and P_mpa >= P_sat):
             status = "Cận tới hạn (Pha Lỏng)"
         else:
             status = "Pha Hơi / Quá nhiệt"
-            # Nếu ở chế độ quét ma trận đồ thị lỏng thì lọc bỏ pha hơi để tránh lỗi hiển thị khuyết
             if filter_liquid:
                 return np.nan, np.nan, np.nan, status
                 
@@ -87,7 +87,7 @@ with col_m1:
     metrics_col2.metric("Enthalpy (h)", f"{h_work:.2f} kJ/kg" if not np.isnan(h_work) else "N/A")
     metrics_col3.metric("Entropy (s)", f"{s_work:.2f} kJ/kg·K" if not np.isnan(s_work) else "N/A")
     
-    # Hiển thị trạng thái bằng khối thông báo màu trực quan đúng bản chất vật lý
+    # Đổi khối thông báo động sang màu xanh lá chuẩn khi hệ thống là chất lỏng cận tới hạn
     if "Pha Lỏng" in status_work or "Siêu tới hạn" in status_work:
         st.success(f"**Trạng thái hệ thống:** {status_work}")
     else:
@@ -111,7 +111,6 @@ T_mesh, P_mesh = np.meshgrid(T_range, P_range)
 Rho_mesh = np.zeros_like(T_mesh)
 H_mesh = np.zeros_like(T_mesh)
 
-# Quét ma trận xử lý lưới đồ thị (Đã sửa lỗi cấu trúc .shape lấy chỉ số dòng và cột)
 for i in range(P_mesh.shape[0]):
     for j in range(P_mesh.shape[1]):
         rho, h, _, status = calculate_properties(T_mesh[i, j], P_mesh[i, j], fluid_string, filter_liquid=True)
@@ -127,9 +126,8 @@ with plot_col1:
     ax1 = fig1.add_subplot(1, 1, 1, projection='3d')
     surf1 = ax1.plot_surface(T_mesh, P_mesh, Rho_mesh, cmap='viridis_r', edgecolor='none', alpha=0.6)
     
-    # Chấm tọa độ điểm làm việc hiện tại của bạn
     if not np.isnan(rho_work):
-        ax1.scatter(T_work, P_work, rho_work, color='red', s=120, label='Điểm làm việc hiện tại', zorder=5)
+        ax1.scatter(T_work, P_work, rho_work, color='red', s=120, label='Điểm làm việc', zorder=5)
     
     ax1.set_xlabel("Nhiệt độ (°C)")
     ax1.set_ylabel("Áp suất (MPa)")
@@ -144,13 +142,10 @@ with plot_col2:
     contour = ax2.contourf(T_mesh, P_mesh, H_mesh, levels=20, cmap='plasma', alpha=0.7)
     fig2.colorbar(contour, ax=ax2, label="Enthalpy (kJ/kg)")
     
-    # Tạo đường dóng tọa độ chữ thập màu đỏ cắt nhau tại điểm làm việc
     ax2.axvline(x=T_work, color='red', linestyle='--', alpha=0.4)
     ax2.axhline(y=P_work, color='red', linestyle='--', alpha=0.4)
     ax2.scatter(T_work, P_work, color='red', edgecolor='black', s=130, label=f'Đang chọn: {T_work}°C, {P_work}MPa', zorder=5)
-    
-    # Đánh dấu mốc giới hạn tới hạn của hệ
-    ax2.scatter(T_critical, P_critical, color='cyan', marker='X', s=160, edgecolor='black', label='Mốc tới hạn của hệ', zorder=5)
+    ax2.scatter(T_critical, P_critical, color='cyan', marker='X', s=160, edgecolor='black', label='Mốc tới hạn', zorder=5)
     
     ax2.set_xlim(t_plot_min, t_plot_max)
     ax2.set_ylim(0, p_plot_max)
