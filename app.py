@@ -1,116 +1,84 @@
+import streamlit as st
 import CoolProp.CoolProp as CP
 import numpy as np
 import matplotlib.pyplot as plt
-from tabulate import tabulate
+import pandas as pd
 
-class SubcriticalWaterCalculator:
-    def __init__(self):
-        self.fluid = "Water"
+# Thiết lập tiêu đề trang web
+st.set_page_config(page_title="Mô phỏng Nhiệt động lực học", layout="wide")
+st.title(" MÔ PHỎNG THÔNG SỐ NHIỆT ĐỘNG LỰC HỌC")
+st.subheader("Hệ thống: Nước cận tới hạn (Subcritical Water)")
+
+# --- THANH ĐIỀU KHIỂN (SIDEBAR) ---
+st.sidebar.header("Cấu hình dải mô phỏng")
+t_min, t_max = st.sidebar.slider("Dải nhiệt độ (°C)", 100.0, 374.0, (100.0, 374.0))
+p_min, p_max = st.sidebar.slider("Dải áp suất (MPa)", 0.1, 22.0, (0.1, 22.0))
+
+# --- HÀM TÍNH TOÁN NHIỆT ĐỘNG ---
+def calculate_properties(T_celsius, P_mpa):
+    T_kelvin = T_celsius + 273.15
+    P_pascal = P_mpa * 1e6
+    try:
+        phase = CP.PhaseSI('T', T_kelvin, 'P', P_pascal, 'Water')
+        rho = CP.PropsSI('D', 'T', T_kelvin, 'P', P_pascal, 'Water')
+        h = CP.PropsSI('H', 'T', T_kelvin, 'P', P_pascal, 'Water') / 1000
+        s = CP.PropsSI('S', 'T', T_kelvin, 'P', P_pascal, 'Water') / 1000
         
-    def calculate_properties(self, T_celsius, P_mpa):
-        """
-        Tính toán thông số nhiệt động của nước tại T (°C) và P (MPa).
-        Tự động xác định xem có đạt trạng thái lỏng/cận tới hạn hay không.
-        """
-        T_kelvin = T_celsius + 273.15
-        P_pascal = P_mpa * 1e6  # Chuyển MPa sang Pascal
-        
-        try:
-            # Lấy trạng thái pha
-            phase = CP.PhaseSI('T', T_kelvin, 'P', P_pascal, self.fluid)
-            
-            # Tính toán thông số
-            rho = CP.PropsSI('D', 'T', T_kelvin, 'P', P_pascal, self.fluid)      # Mật độ (kg/m3)
-            h = CP.PropsSI('H', 'T', T_kelvin, 'P', P_pascal, self.fluid) / 1000  # Enthalpy (kJ/kg)
-            s = CP.PropsSI('S', 'T', T_kelvin, 'P', P_pascal, self.fluid) / 1000  # Entropy (kJ/kg.K)
-            
-            # Gắn nhãn phân loại trạng thái để người dùng dễ theo dõi
-            status = "Cận tới hạn (Lỏng)" if phase in [CP.iphase_liquid, CP.iphase_supercritical_liquid] else "Hơi/Quá nhiệt"
-            
-            return {
-                "T": T_celsius, "P": P_mpa, "Rho": rho, "H": h, "S": s, "Phase": phase, "Status": status
-            }
-        except Exception as e:
-            # Trả về N/A nếu vượt quá ranh giới toán học của thư viện
-            return {"T": T_celsius, "P": P_mpa, "Rho": np.nan, "H": np.nan, "S": np.nan, "Phase": "Unknown", "Status": "Lỗi dữ liệu"}
+        if phase in [CP.iphase_liquid, CP.iphase_supercritical_liquid]:
+            status = "Cận tới hạn (Lỏng)"
+        else:
+            status = "Hơi/Quá nhiệt"
+            rho, h, s = np.nan, np.nan, np.nan
+        return rho, h, s, status
+    except:
+        return np.nan, np.nan, np.nan, "Lỗi dữ liệu"
 
-    def generate_mesh_data(self, T_range, P_range):
-        """Tạo lưới dữ liệu để vẽ đồ thị"""
-        T_mesh, P_mesh = np.meshgrid(T_range, P_range)
-        Rho_mesh = np.zeros_like(T_mesh)
-        H_mesh = np.zeros_like(T_mesh)
-        
-        for i in range(P_mesh.shape[0]):
-            for j in range(P_mesh.shape[1]):
-                res = self.calculate_properties(T_mesh[i, j], P_mesh[i, j])
-                # Nếu là hơi quá nhiệt, ta gán np.nan để đồ thị chỉ tập trung hiển thị vùng chất lỏng cận tới hạn
-                if res["Status"] == "Cận tới hạn (Lỏng)":
-                    Rho_mesh[i, j] = res["Rho"]
-                    H_mesh[i, j] = res["H"]
-                else:
-                    Rho_mesh[i, j] = np.nan
-                    H_mesh[i, j] = np.nan
-                    
-        return T_mesh, P_mesh, Rho_mesh, H_mesh
+# --- TẠO DỮ LIỆU VÀ ĐỒ THỊ ---
+T_range = np.linspace(t_min, t_max, 30)
+P_range = np.linspace(p_min, p_max, 30)
+T_mesh, P_mesh = np.meshgrid(T_range, P_range)
 
-# --- CHẠY CHƯƠNG TRÌNH VÀ VẼ ĐỒ THỊ ---
-if __name__ == "__main__":
-    calc = SubcriticalWaterCalculator()
-    
-    # 1. In một số điểm dữ liệu mẫu ra bảng để kiểm tra nhanh
-    sample_points = [
-        (100, 0.1),  # Điểm sôi chuẩn
-        (150, 1.0),  # Lỏng nén
-        (250, 5.0),  # Cận tới hạn điển hình
-        (300, 15.0), # Cận tới hạn áp suất cao
-        (350, 22.0), # Sát điểm tới hạn (374°C, 22.06 MPa)
-        (350, 0.1)   # Vùng này sẽ hóa hơi (Áp suất quá thấp)
-    ]
-    
-    table_data = []
-    for T, P in sample_points:
-        res = calc.calculate_properties(T, P)
-        table_data.append([
-            f"{res['T']} °C", f"{res['P']} MPa", 
-            f"{res['Rho']:.2f}" if not np.isnan(res['Rho']) else "N/A",
-            f"{res['H']:.2f}" if not np.isnan(res['H']) else "N/A",
-            f"{res['S']:.2f}" if not np.isnan(res['S']) else "N/A",
-            res['Status']
-        ])
-        
-    headers = ["Nhiệt độ", "Áp suất", "Mật độ (kg/m³)", "Enthalpy (kJ/kg)", "Entropy (kJ/kg·K)", "Đánh giá trạng thái"]
-    print("\n=== BẢNG TRA CỨU MẪU NƯỚC CẬN TỚI HẠN ===")
-    print(tabulate(table_data, headers=headers, tablefmt="grid"))
+Rho_mesh = np.zeros_like(T_mesh)
+H_mesh = np.zeros_like(T_mesh)
 
-    # 2. Tạo ma trận dữ liệu quét toàn bộ dải (100-374°C, 0.1-22 MPa)
-    T_range = np.linspace(100, 374, 50)
-    P_range = np.linspace(0.1, 22.0, 50)
-    T_mesh, P_mesh, Rho_mesh, H_mesh = calc.generate_mesh_data(T_range, P_range)
+# Quét ma trận
+for i in range(P_mesh.shape[0]):
+    for j in range(P_mesh.shape[1]):
+        rho, h, _, status = calculate_properties(T_mesh[i, j], P_mesh[i, j])
+        Rho_mesh[i, j] = rho
+        H_mesh[i, j] = h
 
-    # 3. Vẽ đồ thị biểu diễn trực quan
-    fig = plt.figure(figsize=(14, 6))
+# --- HIỂN THỊ KẾT QUẢ LÊN WEB ---
+col1, col2 = st.columns(2)
 
-    # Đồ thị 1: Biến thiên Mật độ (Density) dạng 3D bề mặt
-    ax1 = fig.add_subplot(1, 2, 1, projection='3d')
+with col1:
+    st.write("### Đồ thị 3D: Biến thiên Mật độ (kg/m³)")
+    fig1 = plt.figure(figsize=(6, 5))
+    ax1 = fig1.add_subplot(1, 1, 1, projection='3d')
     surf1 = ax1.plot_surface(T_mesh, P_mesh, Rho_mesh, cmap='viridis_r', edgecolor='none', alpha=0.9)
-    ax1.set_title("Mật độ của Nước cận tới hạn ($\lambda$)", fontsize=12, pad=10)
     ax1.set_xlabel("Nhiệt độ (°C)")
     ax1.set_ylabel("Áp suất (MPa)")
-    ax1.set_zlabel("Mật độ (kg/m³)")
-    fig.colorbar(surf1, ax=ax1, shrink=0.5, aspect=10, label="kg/m³")
+    ax1.set_zlabel("Mật độ")
+    fig1.colorbar(surf1, ax=ax1, shrink=0.5, aspect=10)
+    st.pyplot(fig1)
 
-    # Đồ thị 2: Bản đồ đường đẳng nhiệt/đẳng áp của Enthalpy (2D Contour)
-    ax2 = fig.add_subplot(1, 2, 2)
+with col2:
+    st.write("### Bản đồ 2D: Trường nhiệt Enthalpy (kJ/kg)")
+    fig2, ax2 = plt.subplots(figsize=(6, 4.3))
     contour = ax2.contourf(T_mesh, P_mesh, H_mesh, levels=20, cmap='plasma')
-    ax2.set_title("Bản đồ Nhiệt động Enthalpy ($h$)", fontsize=12)
     ax2.set_xlabel("Nhiệt độ (°C)")
     ax2.set_ylabel("Áp suất (MPa)")
-    cbar = fig.colorbar(contour, ax=ax2, label="Enthalpy (kJ/kg)")
-    
-    # Vẽ thêm đường ranh giới tượng trưng (vùng màu trắng trống là vùng nước đã bị hóa hơi)
-    ax2.text(120, 2, "Vùng Hơi\n(Bị loại bỏ)", color='red', fontsize=10, weight='bold')
-    ax2.text(250, 15, "Vùng Chất lỏng\nCận tới hạn", color='white', fontsize=10, weight='bold')
+    fig2.colorbar(contour, ax=ax2)
+    st.pyplot(fig2)
 
-    plt.tight_layout()
-    print("\n[Hệ thống] Đang hiển thị đồ thị mô phỏng...")
-    plt.show()
+# Hiển thị bảng tra cứu mẫu nhanh
+st.write("### Bảng dữ liệu tra cứu nhanh tại một số điểm mẫu")
+samples = [
+    (100, 0.1), (150, 1.0), (250, 5.0), (300, 15.0), (350, 22.0)
+]
+df_list = []
+for t, p in samples:
+    rho, h, s, stat = calculate_properties(t, p)
+    df_list.append({"Nhiệt độ (°C)": t, "Áp suất (MPa)": p, "Mật độ (kg/m³)": rho, "Enthalpy (kJ/kg)": h, "Trạng thái": stat})
+
+st.dataframe(pd.DataFrame(df_list), use_container_width=True)
