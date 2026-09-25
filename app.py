@@ -1,230 +1,116 @@
 import CoolProp.CoolProp as CP
 import numpy as np
-import pandas as pd
-import plotly.graph_objects as go
-import streamlit as st
+import matplotlib.pyplot as plt
+from tabulate import tabulate
 
-# Cấu hình giao diện Streamlit hiển thị tối ưu trên cả điện thoại và máy tính
-st.set_page_config(page_title="SFE/SWE Thermophysical Tool", layout="centered")
-
-st.title("🔬 Công Cụ Nhiệt Động Lực Học Dung Môi Siêu Tới Hạn & Chất lỏng áp suất")
-st.caption("Phát triển bởi TS. Hồ Công Trực")
-
-# =========================================================================
-# HÀM 1: TÍNH TOÁN VÀ HIỂN THỊ BẢNG TRA CỨU CHO HỖN HỢP
-# =========================================================================
-def hien_thi_bang_tra_cuu(P_input, P_Pa):
-    st.write("---")
-    st.subheader(f"📋 Bảng nhiệt độ sôi & hằng số điện môi hỗn hợp tại {P_input} bar")
-    st.markdown(
-        f"Bảng dưới đây liệt kê điểm sôi và tính chất phân cực (Hằng số điện môi $\\varepsilon$) "
-        f"tại các mốc nồng độ khác nhau dưới áp suất không đổi **{P_input} bar**."
-    )
-
-    nong_do_list = [1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 95.0, 99.5]
-    col_nong_do, col_bubble, col_dew, col_eps = [], [], [], []
-    
-    try:
-        state_vle = CP.AbstractState("HEOS", "Ethanol&Water")
-        for pct in nong_do_list:
-            w_e_t = pct / 100.0
-            w_w_t = 1.0 - w_e_t
-            col_nong_do.append(f"{pct}%")
-            
-            try:
-                state_vle.set_mass_fractions([w_e_t, w_w_t])
-                state_vle.update(CP.PQ_INPUTS, P_Pa, 0.0)
-                T_b = state_vle.T() - 273.15
-                col_bubble.append(f"{T_b:.2f} °C")
-                
-                state_vle.update(CP.PQ_INPUTS, P_Pa, 1.0)
-                T_d = state_vle.T() - 273.15
-                col_dew.append(f"{T_d:.2f} °C")
-                
-                v_e_t = (w_e_t / 0.789) / ((w_e_t / 0.789) + (w_w_t / 1.0))
-                eps_mix_table = max(1.0, v_e_t * (24.30 - 0.130 * (T_b - 25.0)) + (1.0 - v_e_t) * (78.54 - 0.360 * (T_b - 25.0)))
-                col_eps.append(f"{eps_mix_table:.2f}")
-            except:
-                col_bubble.append("Vượt điểm tới hạn")
-                col_dew.append("Vượt điểm tới hạn")
-                col_eps.append("N/A")
-                
-        display_df = pd.DataFrame()
-        display_df["Nồng độ Ethanol"] = col_nong_do
-        display_df["Nhiệt độ bắt đầu sôi (Bubble Point)"] = col_bubble
-        display_df["Nhiệt độ hóa hơi hoàn toàn (Dew Point)"] = col_dew
-        display_df["Hằng số điện môi tại điểm sôi (ε)"] = col_eps
-        st.dataframe(display_df, use_container_width=True)
-    except Exception as e:
-        st.error(f"Lỗi tạo bảng tra cứu hỗn hợp: {e}")
-
-# =========================================================================
-# HÀM 2: VẼ GIẢN ĐỒ PHA TƯƠNG TÁC (PLOTLY) - ĐÃ KHẮC PHỤC LỖI HIỂN THỊ
-# =========================================================================
-def ve_gian_do_pha(solvent, T_input, P_input, critical_T, critical_P, t_min, t_max, p_min, p_max, w_ethanol, nong_do_percent):
-    fig = go.Figure()
-
-    if solvent != "Ethanol_Water":
+class SubcriticalWaterCalculator:
+    def __init__(self):
+        self.fluid = "Water"
+        
+    def calculate_properties(self, T_celsius, P_mpa):
+        """
+        Tính toán thông số nhiệt động của nước tại T (°C) và P (MPa).
+        Tự động xác định xem có đạt trạng thái lỏng/cận tới hạn hay không.
+        """
+        T_kelvin = T_celsius + 273.15
+        P_pascal = P_mpa * 1e6  # Chuyển MPa sang Pascal
+        
         try:
-            # Lấy giới hạn nhiệt độ chuẩn của chất từ CoolProp
-            T_triple = CP.PropsSI("Tmin", "T", 0, "P", 0, solvent)
-            T_crit = CP.PropsSI("Tcrit", "T", 0, "P", 0, solvent)
+            # Lấy trạng thái pha
+            phase = CP.PhaseSI('T', T_kelvin, 'P', P_pascal, self.fluid)
             
-            # Quét an toàn: Tránh điểm kỳ dị tại chính xác Tmin và Tcrit
-            T_space = np.linspace(T_triple + 0.1, T_crit - 0.1, 150)
-            T_degC = T_space - 273.15
-            P_sat_bar = []
+            # Tính toán thông số
+            rho = CP.PropsSI('D', 'T', T_kelvin, 'P', P_pascal, self.fluid)      # Mật độ (kg/m3)
+            h = CP.PropsSI('H', 'T', T_kelvin, 'P', P_pascal, self.fluid) / 1000  # Enthalpy (kJ/kg)
+            s = CP.PropsSI('S', 'T', T_kelvin, 'P', P_pascal, self.fluid) / 1000  # Entropy (kJ/kg.K)
             
-            for t in T_space:
-                try:
-                    p_pa = CP.PropsSI("P", "T", t, "Q", 0, solvent)
-                    P_sat_bar.append(p_pa / 1e5)
-                except:
-                    P_sat_bar.append(None)
+            # Gắn nhãn phân loại trạng thái để người dùng dễ theo dõi
+            status = "Cận tới hạn (Lỏng)" if phase in [CP.iphase_liquid, CP.iphase_supercritical_liquid] else "Hơi/Quá nhiệt"
             
-            # Vẽ đường bão hòa lỏng - hơi
-            fig.add_trace(go.Scatter(
-                x=T_degC, y=P_sat_bar,
-                mode='lines',
-                name='Đường bão hòa Lỏng - Hơi',
-                line=dict(color='red', width=3)
-            ))
-            
+            return {
+                "T": T_celsius, "P": P_mpa, "Rho": rho, "H": h, "S": s, "Phase": phase, "Status": status
+            }
         except Exception as e:
-            st.warning(f"Không thể dựng đường bão hòa tự động: {e}")
-            
-        # Thêm điểm tới hạn cố định của chất
-        fig.add_trace(go.Scatter(
-            x=[critical_T], y=[critical_P],
-            mode='markers+text',
-            name='Điểm tới hạn',
-            text=[f" Critical Point ({critical_T:.1f}°C, {critical_P:.1f} bar)"],
-            textposition="top right",
-            marker=dict(color='green', size=12, symbol='circle')
-        ))
-    else:
-        # Đối với hỗn hợp Ethanol_Water
-        mix_T_crit = 373.95 - (373.95 - 240.75) * w_ethanol
-        mix_P_crit = 220.64 - (220.64 - 61.48) * w_ethanol
-        fig.add_trace(go.Scatter(
-            x=[mix_T_crit], y=[mix_P_crit],
-            mode='markers+text',
-            name='Điểm tới hạn hỗn hợp',
-            text=[f" Mixture Critical Point ({mix_T_crit:.1f}°C, {mix_P_crit:.1f} bar)"],
-            textposition="top right",
-            marker=dict(color='green', size=12, symbol='circle')
-        ))
+            # Trả về N/A nếu vượt quá ranh giới toán học của thư viện
+            return {"T": T_celsius, "P": P_mpa, "Rho": np.nan, "H": np.nan, "S": np.nan, "Phase": "Unknown", "Status": "Lỗi dữ liệu"}
 
-    # Thêm điểm vận hành thực tế mà người dùng đang chọn trên thanh trượt
-    fig.add_trace(go.Scatter(
-        x=[T_input], y=[P_input],
-        mode='markers+text',
-        name='Điểm vận hành',
-        text=[" Vị trí đang chọn"],
-        textposition="bottom center",
-        marker=dict(color='blue', size=14, symbol='x')
-    ))
-
-    # Cấu hình Layout cho đồ thị thích ứng lưới nét đứt
-    fig.update_layout(
-        title=f"Giản đồ Pha Áp suất - Nhiệt độ ({solvent if solvent != 'Ethanol_Water' else 'Hỗn hợp'})",
-        xaxis_title="Nhiệt độ T (°C)",
-        yaxis_title="Áp suất P (bar)",
-        xaxis=dict(range=[t_min, t_max], gridcolor='rgba(200,200,200,0.4)', showgrid=True),
-        yaxis=dict(range=[p_min, p_max], gridcolor='rgba(200,200,200,0.4)', showgrid=True),
-        template="plotly_white",
-        hovermode="closest",
-        height=500
-    )
-
-    # Đưa đường nét đứt định vị điểm vận hành vào đồ thị
-    fig.add_vline(x=T_input, line_width=1, line_dash="dash", line_color="gray")
-    fig.add_hline(y=P_input, line_width=1, line_dash="dash", line_color="gray")
-
-    st.plotly_chart(fig, use_container_width=True)
-
-
-# =========================================================================
-# 3. GIAO DIỆN KHỞI TẠO ĐẦU VÀO
-# =========================================================================
-st.header("⚙️ Thông số vận hành")
-
-solvent = st.selectbox(
-    "Chọn dung môi trích ly:",
-    options=["CarbonDioxide", "Water", "Ethanol_Water"],
-    format_func=lambda x: "1. CO2 (Trích ly siêu tới hạn - SFE)" if x == "CarbonDioxide"
-    else ("2. Nước (Trích ly cận tới hạn - SWE)" if x == "Water" else "3. Hỗn hợp Ethanol & Nước (Chất lỏng siêu áp)"),
-)
-
-w_ethanol, w_water, nong_do_percent = 0.0, 1.0, 0.0
-
-if solvent == "Ethanol_Water":
-    nong_do_percent = st.slider("Nồng độ Ethanol trong hỗn hợp (% khối lượng):", min_value=0.0, max_value=100.0, value=70.0, step=1.0)
-    w_ethanol = nong_do_percent / 100.0
-    w_water = 1.0 - w_ethanol
-    t_min, t_max, t_default = 20.0, 400.0, 150.0
-    p_min, p_max, p_default = 1.0, 240.0, 25.0
-    critical_T = 373.95 - (373.95 - 240.75) * w_ethanol
-    critical_P = 220.64 - (220.64 - 61.48) * w_ethanol
-else:
-    if solvent == "CarbonDioxide":
-        t_min, t_max, t_default = -20.0, 100.0, 35.0
-        p_min, p_max, p_default = 1.0, 300.0, 80.0
-        critical_T = 31.06
-        critical_P = 73.77
-    else:
-        t_min, t_max, t_default = 25.0, 400.0, 150.0
-        p_min, p_max, p_default = 1.0, 250.0, 15.0
-        critical_T = 373.95
-        critical_P = 220.64
-
-T_input = st.slider("Nhiệt độ vận hành (°C):", min_value=float(t_min), max_value=float(t_max), value=float(t_default))
-P_input = st.slider("Áp suất vận hành (bar):", min_value=float(p_min), max_value=float(p_max), value=float(p_default))
-
-T_K = T_input + 273.15
-P_Pa = P_input * 1e5
-
-# Khởi tạo các giá trị nhiệt động mặc định phòng ngừa lỗi tính toán
-density, viscosity, enthalpy = 0.0, 0.0, 0.0
-phase_vn = "Chưa xác định"
-dielectric_const, polarity_desc = 1.0, "Chưa xác định"
-
-
-# =========================================================================
-# 4. LUỒNG TÍNH TOÁN VÀ HIỂN THỊ KẾT QUẢ
-# =========================================================================
-if solvent == "Ethanol_Water":
-    try:
-        state = CP.AbstractState("HEOS", "Ethanol&Water")
-        state.set_mass_fractions([w_ethanol, w_water])
-        state.update(CP.PT_INPUTS, P_Pa, T_K)
-        density = state.rhomass()
-        viscosity = state.viscosity()
-        enthalpy = state.hmass() / 1000
+    def generate_mesh_data(self, T_range, P_range):
+        """Tạo lưới dữ liệu để vẽ đồ thị"""
+        T_mesh, P_mesh = np.meshgrid(T_range, P_range)
+        Rho_mesh = np.zeros_like(T_mesh)
+        H_mesh = np.zeros_like(T_mesh)
         
-        p_idx = state.phase()
-        phase_dict = {
-            CP.iphase_liquid: "Chất lỏng dưới hạn / Áp suất cao (Compressed Liquid Mixture)",
-            CP.iphase_gas: "Pha khí (Gas Mixture)",
-            CP.iphase_twophase: "Vùng lưỡng pha Lỏng - Hơi (VLE - Two Phase)",
-            CP.iphase_supercritical: "Hỗn hợp trạng thái Siêu tới hạn (Supercritical Mixture)",
-            CP.iphase_supercritical_liquid: "Chất lỏng siêu tới hạn (Supercritical Liquid)",
-            CP.iphase_supercritical_gas: "Khí siêu tới hạn (Supercritical Gas)"
-        }
-        phase_vn = phase_dict.get(p_idx, "Không xác định rõ pha")
+        for i in range(P_mesh.shape[0]):
+            for j in range(P_mesh.shape[1]):
+                res = self.calculate_properties(T_mesh[i, j], P_mesh[i, j])
+                # Nếu là hơi quá nhiệt, ta gán np.nan để đồ thị chỉ tập trung hiển thị vùng chất lỏng cận tới hạn
+                if res["Status"] == "Cận tới hạn (Lỏng)":
+                    Rho_mesh[i, j] = res["Rho"]
+                    H_mesh[i, j] = res["H"]
+                else:
+                    Rho_mesh[i, j] = np.nan
+                    H_mesh[i, j] = np.nan
+                    
+        return T_mesh, P_mesh, Rho_mesh, H_mesh
+
+# --- CHẠY CHƯƠNG TRÌNH VÀ VẼ ĐỒ THỊ ---
+if __name__ == "__main__":
+    calc = SubcriticalWaterCalculator()
+    
+    # 1. In một số điểm dữ liệu mẫu ra bảng để kiểm tra nhanh
+    sample_points = [
+        (100, 0.1),  # Điểm sôi chuẩn
+        (150, 1.0),  # Lỏng nén
+        (250, 5.0),  # Cận tới hạn điển hình
+        (300, 15.0), # Cận tới hạn áp suất cao
+        (350, 22.0), # Sát điểm tới hạn (374°C, 22.06 MPa)
+        (350, 0.1)   # Vùng này sẽ hóa hơi (Áp suất quá thấp)
+    ]
+    
+    table_data = []
+    for T, P in sample_points:
+        res = calc.calculate_properties(T, P)
+        table_data.append([
+            f"{res['T']} °C", f"{res['P']} MPa", 
+            f"{res['Rho']:.2f}" if not np.isnan(res['Rho']) else "N/A",
+            f"{res['H']:.2f}" if not np.isnan(res['H']) else "N/A",
+            f"{res['S']:.2f}" if not np.isnan(res['S']) else "N/A",
+            res['Status']
+        ])
         
-        # Tính toán hằng số điện môi gần đúng cho hỗn hợp lỏng
-        v_e = (w_ethanol / 0.789) / ((w_ethanol / 0.789) + (w_water / 1.0))
-        dielectric_const = max(1.0, v_e * (24.30 - 0.130 * (T_input - 25.0)) + (1.0 - v_e) * (78.54 - 0.360 * (T_input - 25.0)))
-    except Exception as e:
-        st.error(f"Lỗi tính chất hỗn hợp Ethanol/Nước: {e}")
-else:
-    try:
-        density = CP.PropsSI("D", "T", T_K, "P", P_Pa, solvent)
-        viscosity = CP.PropsSI("V", "T", T_K, "P", P_Pa, solvent)
-        enthalpy = CP.PropsSI("H", "T", T_K, "P", P_Pa, solvent) / 1000
-        
-        try:
-            phase_str = CP.PhaseSI("T", T_K, "P", P_Pa, solvent)
-            phase_dict = {
-                "liquid": "Chất lỏng (Liquid)",
+    headers = ["Nhiệt độ", "Áp suất", "Mật độ (kg/m³)", "Enthalpy (kJ/kg)", "Entropy (kJ/kg·K)", "Đánh giá trạng thái"]
+    print("\n=== BẢNG TRA CỨU MẪU NƯỚC CẬN TỚI HẠN ===")
+    print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    # 2. Tạo ma trận dữ liệu quét toàn bộ dải (100-374°C, 0.1-22 MPa)
+    T_range = np.linspace(100, 374, 50)
+    P_range = np.linspace(0.1, 22.0, 50)
+    T_mesh, P_mesh, Rho_mesh, H_mesh = calc.generate_mesh_data(T_range, P_range)
+
+    # 3. Vẽ đồ thị biểu diễn trực quan
+    fig = plt.figure(figsize=(14, 6))
+
+    # Đồ thị 1: Biến thiên Mật độ (Density) dạng 3D bề mặt
+    ax1 = fig.add_subplot(1, 2, 1, projection='3d')
+    surf1 = ax1.plot_surface(T_mesh, P_mesh, Rho_mesh, cmap='viridis_r', edgecolor='none', alpha=0.9)
+    ax1.set_title("Mật độ của Nước cận tới hạn ($\lambda$)", fontsize=12, pad=10)
+    ax1.set_xlabel("Nhiệt độ (°C)")
+    ax1.set_ylabel("Áp suất (MPa)")
+    ax1.set_zlabel("Mật độ (kg/m³)")
+    fig.colorbar(surf1, ax=ax1, shrink=0.5, aspect=10, label="kg/m³")
+
+    # Đồ thị 2: Bản đồ đường đẳng nhiệt/đẳng áp của Enthalpy (2D Contour)
+    ax2 = fig.add_subplot(1, 2, 2)
+    contour = ax2.contourf(T_mesh, P_mesh, H_mesh, levels=20, cmap='plasma')
+    ax2.set_title("Bản đồ Nhiệt động Enthalpy ($h$)", fontsize=12)
+    ax2.set_xlabel("Nhiệt độ (°C)")
+    ax2.set_ylabel("Áp suất (MPa)")
+    cbar = fig.colorbar(contour, ax=ax2, label="Enthalpy (kJ/kg)")
+    
+    # Vẽ thêm đường ranh giới tượng trưng (vùng màu trắng trống là vùng nước đã bị hóa hơi)
+    ax2.text(120, 2, "Vùng Hơi\n(Bị loại bỏ)", color='red', fontsize=10, weight='bold')
+    ax2.text(250, 15, "Vùng Chất lỏng\nCận tới hạn", color='white', fontsize=10, weight='bold')
+
+    plt.tight_layout()
+    print("\n[Hệ thống] Đang hiển thị đồ thị mô phỏng...")
+    plt.show()
