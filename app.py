@@ -4,19 +4,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import io
+import os
 
 # Thiết lập cấu hình giao diện trang web rộng rãi
 st.set_page_config(page_title="Mô phỏng Hệ Nhiệt động lực học", layout="wide")
-st.title(" MÔ PHỎNG VÀ ĐỊNH VỊ ĐIỂM LÀM VIỆC CỦA HỆ DUNG MÔI")
 
-# --- THANH ĐIỀU KHIỂN (SIDEBAR) ---
+# --- CHÈN HÌNH ẢNH VÀO NHÃN HIỆU (SIDEBAR BRANDING) ---
+st.sidebar.markdown("### 🌿 NHÃN HIỆU ỨNG DỤNG")
+image_path = "hoan_ngoc.png"
+
+if os.path.exists(image_path):
+    st.sidebar.image(image_path, caption="Dược liệu nghiên cứu: Cây Hoàn Ngọc", use_container_width=True)
+else:
+    st.sidebar.info("💡 Hệ thống đang chạy ổn định.")
+
 st.sidebar.header(" CẤU HÌNH ĐIỂM LÀM VIỆC")
 
+# Lựa chọn loại hệ dung môi để tính toán
 fluid_type = st.sidebar.selectbox(
     "Chọn hệ dung môi cần khảo sát:",
     ["1. Nước cận tới hạn (Thuần túy)", "2. Hỗn hợp Ethanol / Nước (0% - 99.5%)"]
 )
 
+# Cấu hình thanh trượt dựa trên hệ dung môi đã chọn
 if fluid_type == "1. Nước cận tới hạn (Thuần túy)":
     T_work = st.sidebar.slider("Nhiệt độ làm việc T (°C)", 100.0, 374.0, 250.0, step=1.0)
     P_work = st.sidebar.slider("Áp suất làm việc P (MPa)", 0.1, 22.0, 10.00, step=0.05)
@@ -24,14 +34,17 @@ if fluid_type == "1. Nước cận tới hạn (Thuần túy)":
     fluid_string = "Water"
     T_critical = 373.946  
     P_critical = 22.064   
+    st.title(" MÔ PHỎNG VÀ ĐỊNH VỊ ĐIỂM LÀM VIỆC CỦA HỆ DUNG MÔI")
     st.subheader("Hệ thống: Nước (Pure Water Simulation)")
 else:
     eth_pct = st.sidebar.slider("Nồng độ Ethanol (% khối lượng)", 0.0, 99.5, 50.0, step=0.5)
     T_work = st.sidebar.slider("Nhiệt độ làm việc T (°C)", 20.0, 240.0, 80.0, step=1.0)
     P_work = st.sidebar.slider("Áp suất làm việc P (MPa)", 0.1, 15.0, 5.0, step=0.05)
     
+    st.title(" MÔ PHỎNG VÀ ĐỊNH VỊ ĐIỂM LÀM VIỆC CỦA HỆ DUNG MÔI")
     st.subheader(f"Hệ thống: Hỗn hợp Ethanol/Nước ({eth_pct}%)")
     
+    # Quy đổi phần trăm khối lượng sang phần trăm mol (Mole fraction) để CoolProp hiểu
     M_eth, M_wat = 46.07, 18.02
     w_eth = eth_pct / 100.0
     w_wat = 1.0 - w_eth
@@ -43,7 +56,7 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (Chỉ áp dụng cho Nước tinh khiết) ---
+# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ ---
 def calculate_chemical_solvent_props(T_celsius, rho_kg_m3):
     if np.isnan(rho_kg_m3) or fluid_type != "1. Nước cận tới hạn (Thuần túy)":
         return np.nan, np.nan
@@ -59,7 +72,7 @@ def calculate_chemical_solvent_props(T_celsius, rho_kg_m3):
         pKw = np.nan
     return epsilon, pKw
 
-# --- HÀM TÍNH TOÁN CƠ BẢN ---
+# --- HÀM TÍNH TOÁN VÀ ĐỊNH VỊ PHA THỰC TẾ THEO RANH GIỚI MẬT ĐỘ ĐỘNG ---
 def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
     T_kelvin = T_celsius + 273.15
     P_pascal = P_mpa * 1e6
@@ -68,14 +81,16 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
         h = CP.PropsSI('H', 'T', T_kelvin, 'P', P_pascal, fluid_str) / 1000
         s = CP.PropsSI('S', 'T', T_kelvin, 'P', P_pascal, fluid_str) / 1000
         
+        # 🌟 LOGIC ĐỘNG: Tính toán mật độ pha hơi bão hòa tại T hiện tại để làm mốc so sánh
         try:
-            P_sat = CP.PropsSI('P', 'T', T_kelvin, 'Q', 0, fluid_str) / 1e6
+            rho_gas_sat = CP.PropsSI('D', 'T', T_kelvin, 'Q', 1, fluid_str)
         except:
-            P_sat = 0.0
+            # Nếu sát hoặc vượt quá điểm tới hạn, đặt giá trị mốc an toàn
+            rho_gas_sat = 250.0
 
         if T_celsius >= T_critical:
             status = "Siêu tới hạn (Supercritical Fluid)"
-        elif P_mpa >= P_sat or P_sat == 0.0:
+        elif rho > (rho_gas_sat + 20.0): # Nếu mật độ lớn hơn hẳn pha hơi bão hòa thì chắc chắn là lỏng
             status = "Cận tới hạn (Pha Lỏng)"
         else:
             status = "Pha Hơi / Quá nhiệt"
@@ -99,11 +114,11 @@ with col_m1:
     metrics_col2.metric("Enthalpy (h)", f"{h_work:.2f} kJ/kg" if not np.isnan(h_work) else "N/A")
     metrics_col3.metric("Entropy (s)", f"{s_work:.2f} kJ/kg·K" if not np.isnan(s_work) else "N/A")
     
-    # Sử dụng khối success màu xanh để ghi nhận trạng thái lỏng cận tới hạn chính xác
+    # HIỂN THỊ CHÍNH XÁC KHỐI THÔNG BÁO THEO HỆ MỚI
     if "Pha Lỏng" in status_work or "Siêu tới hạn" in status_work:
         st.success(f"**Trạng thái hệ thống:** {status_work}")
     else:
-        st.warning(f"**Trạng thái hệ thống:** {status_work} (Áp suất thấp dưới bão hòa gây hóa hơi)")
+        st.warning(f"**Trạng thái hệ thống:** {status_work} (Áp suất thấp gây hóa hơi)")
 
 with col_m2:
     st.write("### 🚨 Các tính chất dung môi đặc trưng:")
@@ -115,7 +130,7 @@ with col_m2:
         chem_col1.metric("Nhiệt độ tới hạn $T_c$", f"{T_critical:.2f} °C")
         chem_col2.metric("Áp suất tới hạn $P_c$", f"{P_critical:.2f} MPa")
 
-# --- TẠO LƯỚI NỀN ĐỒ THỊ VÀ XỬ LÝ MA TRẬN DỮ LIỆU ---
+# --- TẠO LƯỚI NỀN ĐỒ THỊ ---
 t_plot_min = 20.0
 t_plot_max = 390.0 if fluid_type == "1. Nước cận tới hạn (Thuần túy)" else 280.0
 p_plot_max = 24.0 if fluid_type == "1. Nước cận tới hạn (Thuần túy)" else 16.0
@@ -133,7 +148,7 @@ for i in range(P_mesh.shape[0]):
         Rho_mesh[i, j] = rho
         H_mesh[i, j] = h
 
-# --- VẼ ĐỒ THỊ ---
+# --- VẼ CÁC CỤM ĐỒ THỊ ---
 plot_col1, plot_col2 = st.columns(2)
 
 with plot_col1:
@@ -154,8 +169,8 @@ with plot_col2:
     contour = ax2.contourf(T_mesh, P_mesh, H_mesh, levels=20, cmap='plasma', alpha=0.6)
     fig2.colorbar(contour, ax=ax2, label="Enthalpy (kJ/kg)")
     
-    # Vẽ đường ranh giới bão hòa lỏng hơi thực tế màu cam
-    T_sat_line = np.linspace(t_plot_min, T_critical - 0.5, 100)
+    # Vẽ đường ranh giới bão hòa lỏng-hơi thực tế màu cam đậm
+    T_sat_line = np.linspace(t_plot_min, T_critical - 1.0, 50)
     P_sat_line = []
     for t_s in T_sat_line:
         try:
@@ -179,7 +194,7 @@ with plot_col2:
     ax2.grid(True, linestyle=':', alpha=0.6)
     st.pyplot(fig2)
 
-# --- XUẤT FILE DỮ LIỆU ---
+# --- XUẤT FILE MA TRẬN DỮ LIỆU ---
 st.write("### 💾 Xuất ma trận dữ liệu mô phỏng nền")
 flat_T = T_mesh.flatten()
 flat_P = P_mesh.flatten()
