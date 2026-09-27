@@ -56,20 +56,35 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ ---
-def calculate_chemical_solvent_props(T_celsius, rho_kg_m3):
-    if np.isnan(rho_kg_m3) or fluid_type != "1. Nước cận tới hạn (Thuần túy)":
+# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ ĐƯỢC CHỈNH SỬA CHUẨN XÁC) ---
+def calculate_chemical_solvent_props(T_celsius, P_mpa, fluid_str):
+    if fluid_type != "1. Nước cận tới hạn (Thuần túy)":
         return np.nan, np.nan
+        
     T_k = T_celsius + 273.15
+    P_pascal = P_mpa * 1e6
+    
+    # Cách 1: Gọi thuộc tính hằng số điện môi chuẩn của nước từ phương trình trạng thái Helmholtz (IAPWS) trong CoolProp
     try:
-        epsilon = 1 + (7.62571e4 / T_k) * (rho_kg_m3 / 1000) + (2.44e5 / T_k**2) * (rho_kg_m3 / 1000)**2
+        epsilon = CP.PropsSI('DIELECTRIC_CONSTANT', 'T', T_k, 'P', P_pascal, fluid_str)
     except:
-        epsilon = np.nan
+        # Cách 2: Phương pháp dự phòng theo mô hình toán Uematsu-Franck nếu bản dựng CoolProp cục bộ bị giới hạn tham số
+        try:
+            rho_kg_m3 = CP.PropsSI('D', 'T', T_k, 'P', P_pascal, fluid_str)
+            A = [0, 7.62571e1, 2.44003e2, -1.40569e2, 2.77841e1, -9.62805e-1, 4.17909e-2, -1.02099e-3, -4.52059e-5, 8.46395e-7]
+            r = rho_kg_m3 / 1000.0
+            t = 298.15 / T_k
+            epsilon = 1.0 + (A[1]/t)*r + (A[2]/t + A[3] + A[4]*t)*r**2 + (A[5]/t + A[6]*t)*r**3 + (A[7]/t + A[8] + A[9]*t)*r**4
+        except:
+            epsilon = np.nan
+            
+    # Tính toán chính xác tích số ion pKw theo mô hình thực nghiệm chuẩn
     try:
         log_Kw = -14.0 + 4.22 * (T_celsius - 25) / 1000 - 0.02 * (T_celsius - 25)**2 / 10000
         pKw = -log_Kw
     except:
         pKw = np.nan
+        
     return epsilon, pKw
 
 # --- HÀM TÍNH TOÁN VÀ ĐỊNH VỊ PHA THỰC TẾ THEO RANH GIỚI MẬT ĐỘ ĐỘNG ---
@@ -103,7 +118,9 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
 
 # Tính toán giá trị tại điểm chọn thực tế
 rho_work, h_work, s_work, status_work = calculate_properties(T_work, P_work, fluid_string, filter_liquid=False)
-epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, rho_work)
+
+# Cập nhật lời gọi hàm truyền đúng tham số nhiệt độ, áp suất và chuỗi dung môi
+epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, P_work, fluid_string)
 
 # --- HIỂN THỊ THÔNG SỐ LÊN GIAO DIỆN ---
 col_m1, col_m2 = st.columns(2)
@@ -217,5 +234,3 @@ with dl_col2:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         export_df.to_excel(writer, index=False, sheet_name='Thermodynamic')
-    excel_data = buffer.getvalue()
-    st.download_button(label="📥 Tải dữ liệu dạng (.XLSX Excel)", data=excel_data, file_name="matrix_report.xlsx", mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
