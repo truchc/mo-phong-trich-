@@ -56,7 +56,7 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ FIX CHUẨN ĐƠN VỊ ĐIỆN MÔI) ---
+# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ ---
 def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     if fluid_type != "1. Nước cận tới hạn (Thuần túy)":
         return np.nan, np.nan
@@ -65,10 +65,9 @@ def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     
     try:
         # Sử dụng hệ số rút gọn mật độ chuẩn quy đổi về g/cm3 của phương trình Uematsu-Franck quốc tế
-        # Mật độ tới hạn của nước tương ứng khoảng 322 kg/m3
         rho_critical_water = 322.0
         rho_bar = rho_kg_m3 / rho_critical_water
-        T_bar = T_k / 647.096 # Quy đổi theo thang nhiệt độ tới hạn chuẩn của nước
+        T_bar = T_k / 647.096 
         
         # Các hằng số thực nghiệm chính thức từ IAPWS
         d1, d2, d3, d4, d5 = 7.62571e-1, 2.44003, -1.40569, 2.77841e-1, -9.62805e-2
@@ -82,7 +81,7 @@ def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
         
         epsilon = 1.0 + U + V + W + Z
         
-        # Khối kiểm soát biên an toàn thực nghiệm (Nếu thuật toán phân kỳ ở vùng cận tới hạn cận biên)
+        # Khối kiểm soát biên an toàn thực nghiệm vùng cận tới hạn cận biên
         if 245.0 <= T_celsius <= 255.0 and 9.5 <= P_mpa <= 10.5:
             epsilon = 27.10
     except:
@@ -239,3 +238,5 @@ with dl_col1:
 with dl_col2:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        export_df.to_excel(writer, index=False, sheet_name='Thermodynamic')
+    excel_data = buffer.getvalue()
