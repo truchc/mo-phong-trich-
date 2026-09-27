@@ -56,40 +56,32 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ ĐƯỢC FIX LỖI TRAN ĐIỆN MÔI) ---
-def calculate_chemical_solvent_props(T_celsius, P_mpa, fluid_str):
+# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ FIX CHUẨN ĐIỆN MÔI CHUYÊN BIỆT) ---
+def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     if fluid_type != "1. Nước cận tới hạn (Thuần túy)":
         return np.nan, np.nan
         
     T_k = T_celsius + 273.15
-    P_pascal = P_mpa * 1e6
     
-    # Thử gọi thuộc tính lõi trực tiếp từ CoolProp trước
+    # Sử dụng phương trình chuẩn hóa Uematsu-Franck được lập trình tường minh, loại bỏ hoàn toàn mảng lặp lỗi vòng cũ
     try:
-        epsilon = CP.PropsSI('DIELECTRIC_CONSTANT', 'T', T_k, 'P', P_pascal, fluid_str)
+        # Tỉ số rút gọn theo mật độ tiêu chuẩn và nhiệt độ tiêu chuẩn
+        T_star = T_k / 298.15
+        rho_star = rho_kg_m3 / 1000.0
+        
+        # Các tham số chuẩn hóa IAPWS cho hằng số điện môi của nước
+        a = [0, 7.62571e1, 2.44003e2, -1.40569e2, 2.77841e1, -9.62805, 4.17909e-1, -1.02099e-2, -4.52059e-4, 8.46395e-6]
+        
+        N1 = a[1] / T_star
+        N2 = a[2] / T_star + a[3] + a[4] * T_star
+        N3 = a[5] / T_star + a[6] * T_star + a[7] * (T_star**2)
+        N4 = a[8] / (T_star**2) + a[9] / (T_star**3)
+        
+        epsilon = 1.0 + N1 * rho_star + N2 * (rho_star**2) + N3 * (rho_star**3) + N4 * (rho_star**4)
     except:
-        # Nếu CoolProp lỗi/không hỗ trợ, sử dụng phương trình Uematsu-Franck chuẩn hóa (IAPWS)
-        try:
-            rho = CP.PropsSI('D', 'T', T_k, 'P', P_pascal, fluid_str) # Mật độ thực tế từ CoolProp
+        epsilon = np.nan
             
-            # Các hằng số chuẩn của phương trình Uematsu-Franck
-            A = [0, 7.62571e1, 2.44003e2, -1.40569e2, 2.77841e1, -9.62805, 4.17909e-1, -1.02099e-2, -4.52059e-4, 8.46395e-6]
-            
-            # Tham số rút gọn theo tỉ lệ nhiệt độ và mật độ tới hạn của nước
-            T_star = T_k / 298.15
-            rho_star = rho / 1000.0
-            
-            # Triển khai phương trình đa thức IAPWS chuẩn tránh gom sai lũy thừa
-            g1 = A[1] / T_star
-            g2 = A[2] / T_star + A[3] + A[4] * T_star
-            g3 = A[5] / T_star + A[6] * T_star + A[7] * (T_star**2)
-            g4 = A[8] / (T_star**2) + A[9] / (T_star**3)
-            
-            epsilon = 1.0 + g1 * rho_star + g2 * (rho_star**2) + g3 * (rho_star**3) + g4 * (rho_star**4)
-        except:
-            epsilon = np.nan
-            
-    # Tính toán chính xác tích số ion pKw theo mô hình thực nghiệm chuẩn
+    # Tính toán chính xác tích số ion pKw theo mô hình thực nghiệm chuẩn 
     try:
         log_Kw = -14.0 + 4.22 * (T_celsius - 25) / 1000 - 0.02 * (T_celsius - 25)**2 / 10000
         pKw = -log_Kw
@@ -128,8 +120,8 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
 # Tính toán giá trị tại điểm chọn thực tế
 rho_work, h_work, s_work, status_work = calculate_properties(T_work, P_work, fluid_string, filter_liquid=False)
 
-# Gọi hàm tính toán đặc tính dung môi đã được sửa đổi cấu trúc đa thức
-epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, P_work, fluid_string)
+# Truyền mật độ thực tế vào hàm tính toán đặc tính dung môi để đảm bảo công thức Uematsu-Franck chạy chính xác
+epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, P_work, rho_work)
 
 # --- HIỂN THỊ THÔNG SỐ LÊN GIAO DIỆN ---
 col_m1, col_m2 = st.columns(2)
@@ -239,3 +231,7 @@ with dl_col1:
 
 with dl_col2:
     buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        export_df.to_excel(writer, index=False, sheet_name='Thermodynamic')
+    excel_data = buffer.getvalue()
+    st.download_button(label="📥 Tải dữ liệu dạng (.XLSX Excel)", data=excel_data, file_name="matrix_report.xlsx", mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
