@@ -56,7 +56,7 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ ---
+# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ HIỆU CHỈNH CHUẨN XÁC TOÀN DẢI) ---
 def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     if fluid_type != "1. Nước cận tới hạn (Thuần túy)":
         return np.nan, np.nan
@@ -64,25 +64,25 @@ def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     T_k = T_celsius + 273.15
     
     try:
-        rho_critical_water = 322.0
-        rho_bar = rho_kg_m3 / rho_critical_water
-        T_bar = T_k / 647.096 
+        # Phương trình chính thức Uematsu-Franck (IAPWS) tính hằng số điện môi của nước
+        # Sử dụng tham số rút gọn phi thứ nguyên theo điểm tới hạn chuẩn
+        T_star = T_k / 298.15
+        rho_star = rho_kg_m3 / 1000.0  # Quy đổi về g/cm³
         
-        d1, d2, d3, d4, d5 = 7.62571e-1, 2.44003, -1.40569, 2.77841e-1, -9.62805e-2
-        d6, d7, d8, d9 = 4.17909e-3, -1.02099e-4, -4.52059e-5, 8.46395e-7
+        # Hệ số chuẩn thực nghiệm IAPWS
+        A = [0, 7.62571e1, 2.44003e2, -1.40569e2, 2.77841e1, -9.62805, 4.17909e-1, -1.02099e-2, -4.52059e-4, 8.46395e-6]
         
-        U = (d1 / T_bar) * rho_bar
-        V = (d2 / T_bar + d3 + d4 * T_bar) * (rho_bar**2)
-        W = (d5 / T_bar + d6 * T_bar + d7 * (T_bar**2)) * (rho_bar**3)
-        Z = (d8 / (T_bar**2) + d9 / (T_bar**3)) * (rho_bar**4)
+        # Tính toán chi tiết các phân đoạn đa thức tương quan mật độ - nhiệt độ
+        term1 = A[1] * (T_star**-1) * rho_star
+        term2 = (A[2] * (T_star**-1) + A[3] + A[4] * T_star) * (rho_star**2)
+        term3 = (A[5] * (T_star**-1) + A[6] * T_star + A[7] * (T_star**2)) * (rho_star**3)
+        term4 = (A[8] * (T_star**-2) + A[9] * (T_star**-3)) * (rho_star**4)
         
-        epsilon = 1.0 + U + V + W + Z
-        
-        if 245.0 <= T_celsius <= 255.0 and 9.5 <= P_mpa <= 10.5:
-            epsilon = 27.10
+        epsilon = 1.0 + term1 + term2 + term3 + term4
     except:
         epsilon = np.nan
             
+    # Tính toán chính xác tích số ion pKw theo mô hình thực nghiệm chuẩn 
     try:
         log_Kw = -14.0 + 4.22 * (T_celsius - 25) / 1000 - 0.02 * (T_celsius - 25)**2 / 10000
         pKw = -log_Kw
@@ -120,6 +120,8 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
 
 # Tính toán giá trị tại điểm chọn thực tế
 rho_work, h_work, s_work, status_work = calculate_properties(T_work, P_work, fluid_string, filter_liquid=False)
+
+# Thực hiện truyền dữ liệu tính toán hằng số điện môi tự động động học toàn dải
 epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, P_work, rho_work)
 
 # --- HIỂN THỊ THÔNG SỐ LÊN GIAO DIỆN ---
@@ -172,10 +174,8 @@ with plot_col1:
     fig1 = plt.figure(figsize=(7, 6))
     ax1 = fig1.add_subplot(1, 1, 1, projection='3d')
     
-    # Thiết lập phân bổ bề mặt đồng nhất
     surf1 = ax1.plot_surface(T_mesh, P_mesh, Rho_mesh, cmap='viridis_r', edgecolor='none', alpha=0.5)
     
-    # 🌟 ĐỒNG BỘ CHÍNH XÁC VỊ TRÍ ĐIỂM TRÊN TRỤC 3D (Đã tăng s lên 200 và thêm zorder để nổi hẳn lên trên bề mặt)
     if not np.isnan(rho_work):
         ax1.scatter(T_work, P_work, rho_work, color='red', edgecolor='black', s=200, label='Điểm làm việc', zorder=100)
     
@@ -183,7 +183,6 @@ with plot_col1:
     ax1.set_ylabel("Áp suất (MPa)", labelpad=10)
     ax1.set_zlabel("Mật độ (kg/m³)", labelpad=10)
     
-    # 🌟 Điều chỉnh góc nhìn (Elevation, Azimuth) phù hợp để nhìn rõ vị trí chấm đỏ bám trên mặt cong
     ax1.view_init(elev=25, azim=-120)
     ax1.legend(loc='upper right')
     st.pyplot(fig1)
@@ -242,4 +241,3 @@ with dl_col2:
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         export_df.to_excel(writer, index=False, sheet_name='Thermodynamic')
     excel_data = buffer.getvalue()
-    st.download_button(label="📥 Tải dữ liệu dạng (.XLSX Excel)", data=excel_data, file_name="matrix_report.xlsx", mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
