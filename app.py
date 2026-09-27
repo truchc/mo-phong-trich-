@@ -242,6 +242,6 @@ fig_interact.add_trace(go.Scatter(
     line=dict(color='rgba(0,0,0,0)'), name='Pha Lỏng (Water)', hoverinfo='skip'
 ))
 
-# Vẽ 3 đường ranh giới pha tĩnh
+# Vẽ 3 ranh giới pha tĩnh
 fig_interact.add_trace(go.Scatter(
     x=T_sub, y=P_sub, mode='lines',
