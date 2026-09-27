@@ -186,7 +186,7 @@ with plot_col2:
     ax2.grid(True, linestyle=':', alpha=0.6)
     st.pyplot(fig2)
 
-# --- CHÈN: GIẢN ĐỒ PHA TƯƠNG TÁC PLOTLY (THIẾT KẾ RÚT GỌN CHỐNG LỖI CẮT FILE) ---
+# --- CHÈN: GIẢN ĐỒ PHA TƯƠNG TÁC PLOTLY (THIẾT KẾ ĐƠN LỆNH AN TOÀN TUYỆT ĐỐI) ---
 st.write("---")
 st.write("### 🌐 Giản đồ pha tương tác của Nước (Thang đo Áp suất Logarit)")
 
@@ -200,14 +200,11 @@ T_melt = T_tp - 0.007 * (P_melt - P_tp_atm)
 
 fig_interact = go.Figure()
 
-# Gộp các mảng màu nền đổ bóng pha
-fig_interact.add_traces([
-    go.Scatter(x=np.concatenate([T_sub, T_vap, [150, -50]]), y=np.concatenate([P_sub, P_vap, [1e-5, 1e-5]]), fill='toself', fillcolor='rgba(142, 68, 173, 0.11)', line=dict(width=0), name='Hơi', hoverinfo='skip'),
-    go.Scatter(x=np.concatenate([T_sub, T_melt[::-1], [-50]]), y=np.concatenate([P_sub, P_melt[::-1], [1e3]]), fill='toself', fillcolor='rgba(41, 128, 185, 0.11)', line=dict(width=0), name='Rắn', hoverinfo='skip'),
-    go.Scatter(x=np.concatenate([T_melt, T_vap[::-1]]), y=np.concatenate([P_melt, P_vap[::-1]]), fill='toself', fillcolor='rgba(39, 174, 96, 0.11)', line=dict(width=0), name='Lỏng', hoverinfo='skip')
-])
+# 1. Vẽ các mảng màu đổ bóng pha độc lập bằng add_trace()
+fig_interact.add_trace(go.Scatter(x=np.concatenate([T_sub, T_vap, [150, -50]]), y=np.concatenate([P_sub, P_vap, [1e-5, 1e-5]]), fill='toself', fillcolor='rgba(142, 68, 173, 0.11)', line=dict(width=0), name='Hơi', hoverinfo='skip'))
+fig_interact.add_trace(go.Scatter(x=np.concatenate([T_sub, T_melt[::-1], [-50]]), y=np.concatenate([P_sub, P_melt[::-1], [1e3]]), fill='toself', fillcolor='rgba(41, 128, 185, 0.11)', line=dict(width=0), name='Rắn', hoverinfo='skip'))
+fig_interact.add_trace(go.Scatter(x=np.concatenate([T_melt, T_vap[::-1]]), y=np.concatenate([P_melt, P_vap[::-1]]), fill='toself', fillcolor='rgba(39, 174, 96, 0.11)', line=dict(width=0), name='Lỏng', hoverinfo='skip'))
 
-# Gộp 3 đường ranh giới pha tĩnh
-fig_interact.add_traces([
-    go.Scatter(x=T_sub, y=P_sub, mode='lines', line=dict(color='#2c3e50', width=3), name='Thăng hoa', hovertemplate='Rắn-Hơi<br>T: %{x:.1f}°C<br>P: %{y:.4f} atm<extra></extra>'),
-    go.Scatter(x=T_vap, y=P_vap, mode='lines', line=dict(color='#2c3e50', width=3), name='Hóa hơi', hovertemplate='Lỏng-Hơi<br>T: %{x:.1f}°C<br>P: %{y:.4f} atm<extra></extra>'),
+# 2. Vẽ 3 đường ranh giới pha độc lập bằng add_trace()
+fig_interact.add_trace(go.Scatter(x=T_sub, y=P_sub, mode='lines', line=dict(color='#2c3e50', width=3), name='Thăng hoa', hovertemplate='Rắn-Hơi<br>T: %{x:.1f}°C<br>P: %{y:.4f} atm<extra></extra>'))
+fig_interact.add_trace(go.Scatter(x=T_vap, y=P_vap, mode='lines', line=dict(color='#2c3e50', width=3), name='Hóa hơi', hovertemplate='Lỏng-Hơi<br>T: %{x:.1f}°C<br>P: %{y:.4f} atm<extra></extra>'))
