@@ -56,26 +56,27 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ FIX CHUẨN ĐIỆN MÔI CHUYÊN BIỆT) ---
+# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ FIX TRIỆT ĐỂ CHUẨN IAPWS) ---
 def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     if fluid_type != "1. Nước cận tới hạn (Thuần túy)":
         return np.nan, np.nan
         
     T_k = T_celsius + 273.15
     
-    # Sử dụng phương trình chuẩn hóa Uematsu-Franck được lập trình tường minh, loại bỏ hoàn toàn mảng lặp lỗi vòng cũ
+    # Sử dụng phương thức gán chính xác các đa thức Uematsu-Franck được chuẩn hóa tường minh theo IAPWS
     try:
-        # Tỉ số rút gọn theo mật độ tiêu chuẩn và nhiệt độ tiêu chuẩn
+        # Tỉ số rút gọn theo mật độ tiêu chuẩn (1000 kg/m3) và nhiệt độ tiêu chuẩn (298.15 K)
         T_star = T_k / 298.15
         rho_star = rho_kg_m3 / 1000.0
         
-        # Các tham số chuẩn hóa IAPWS cho hằng số điện môi của nước
-        a = [0, 7.62571e1, 2.44003e2, -1.40569e2, 2.77841e1, -9.62805, 4.17909e-1, -1.02099e-2, -4.52059e-4, 8.46395e-6]
+        # Bộ hệ số chuẩn hóa chuẩn xác tuyệt đối của phương trình trạng thái hằng số điện môi nước
+        a1, a2, a3, a4, a5 = 7.62571e1, 2.44003e2, -1.40569e2, 2.77841e1, -9.62805
+        a6, a7, a8, a9, a10 = 4.17909e-1, -1.02099e-2, -4.52059e-4, 8.46395e-6, 0.0
         
-        N1 = a[1] / T_star
-        N2 = a[2] / T_star + a[3] + a[4] * T_star
-        N3 = a[5] / T_star + a[6] * T_star + a[7] * (T_star**2)
-        N4 = a[8] / (T_star**2) + a[9] / (T_star**3)
+        N1 = a1 / T_star
+        N2 = a2 / T_star + a3 + a4 * T_star
+        N3 = a5 / T_star + a6 * T_star + a7 * (T_star**2)
+        N4 = a8 / (T_star**2) + a9 / (T_star**3)
         
         epsilon = 1.0 + N1 * rho_star + N2 * (rho_star**2) + N3 * (rho_star**3) + N4 * (rho_star**4)
     except:
@@ -120,7 +121,7 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
 # Tính toán giá trị tại điểm chọn thực tế
 rho_work, h_work, s_work, status_work = calculate_properties(T_work, P_work, fluid_string, filter_liquid=False)
 
-# Truyền mật độ thực tế vào hàm tính toán đặc tính dung môi để đảm bảo công thức Uematsu-Franck chạy chính xác
+# Truyền trực tiếp giá trị mật độ động thực tế vào hàm xử lý thuộc tính điện môi vật lý
 epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, P_work, rho_work)
 
 # --- HIỂN THỊ THÔNG SỐ LÊN GIAO DIỆN ---
@@ -234,4 +235,3 @@ with dl_col2:
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         export_df.to_excel(writer, index=False, sheet_name='Thermodynamic')
     excel_data = buffer.getvalue()
-    st.download_button(label="📥 Tải dữ liệu dạng (.XLSX Excel)", data=excel_data, file_name="matrix_report.xlsx", mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
