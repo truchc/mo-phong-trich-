@@ -204,7 +204,7 @@ with plot_col2:
     ax2.grid(True, linestyle=':', alpha=0.6)
     st.pyplot(fig2)
 
-# --- CHÈN: GIẢN ĐỒ PHA TƯƠNG TÁC PLOTLY (ĐÃ FIX LỖI ĐÓNG NGOẶC SYNTAX) ---
+# --- CHÈN: GIẢN ĐỒ PHA TƯƠNG TÁC PLOTLY (CỠ CHỮ 20) ---
 st.write("---")
 st.write("### 🌐 Giản đồ pha tương tác của Nước (Thang đo Áp suất Logarit)")
 
@@ -242,4 +242,6 @@ fig_interact.add_trace(go.Scatter(
     line=dict(color='rgba(0,0,0,0)'), name='Pha Lỏng (Water)', hoverinfo='skip'
 ))
 
-# Vẽ 3 ranh giới pha (Tách dòng rõ ràng tránh lỗi thiếu ngoặc)
+# Vẽ 3 đường ranh giới pha tĩnh
+fig_interact.add_trace(go.Scatter(
+    x=T_sub, y=P_sub, mode='lines',
