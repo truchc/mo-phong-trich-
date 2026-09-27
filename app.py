@@ -64,16 +64,13 @@ def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     T_k = T_celsius + 273.15
     
     try:
-        # Sử dụng hệ số rút gọn mật độ chuẩn quy đổi về g/cm3 của phương trình Uematsu-Franck quốc tế
         rho_critical_water = 322.0
         rho_bar = rho_kg_m3 / rho_critical_water
         T_bar = T_k / 647.096 
         
-        # Các hằng số thực nghiệm chính thức từ IAPWS
         d1, d2, d3, d4, d5 = 7.62571e-1, 2.44003, -1.40569, 2.77841e-1, -9.62805e-2
         d6, d7, d8, d9 = 4.17909e-3, -1.02099e-4, -4.52059e-5, 8.46395e-7
         
-        # Triển khai tính toán đa thức thành phần tự phân cực tuyến tính
         U = (d1 / T_bar) * rho_bar
         V = (d2 / T_bar + d3 + d4 * T_bar) * (rho_bar**2)
         W = (d5 / T_bar + d6 * T_bar + d7 * (T_bar**2)) * (rho_bar**3)
@@ -81,13 +78,11 @@ def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
         
         epsilon = 1.0 + U + V + W + Z
         
-        # Khối kiểm soát biên an toàn thực nghiệm vùng cận tới hạn cận biên
         if 245.0 <= T_celsius <= 255.0 and 9.5 <= P_mpa <= 10.5:
             epsilon = 27.10
     except:
         epsilon = np.nan
             
-    # Tính toán chính xác tích số ion pKw theo mô hình thực nghiệm chuẩn 
     try:
         log_Kw = -14.0 + 4.22 * (T_celsius - 25) / 1000 - 0.02 * (T_celsius - 25)**2 / 10000
         pKw = -log_Kw
@@ -125,8 +120,6 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
 
 # Tính toán giá trị tại điểm chọn thực tế
 rho_work, h_work, s_work, status_work = calculate_properties(T_work, P_work, fluid_string, filter_liquid=False)
-
-# Truyền trực tiếp giá trị mật độ động thực tế vào hàm xử lý thuộc tính điện môi vật lý
 epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, P_work, rho_work)
 
 # --- HIỂN THỊ THÔNG SỐ LÊN GIAO DIỆN ---
@@ -178,12 +171,21 @@ with plot_col1:
     st.write("### Đồ thị 3D: Biến thiên mật độ theo trạng thái")
     fig1 = plt.figure(figsize=(7, 6))
     ax1 = fig1.add_subplot(1, 1, 1, projection='3d')
-    surf1 = ax1.plot_surface(T_mesh, P_mesh, Rho_mesh, cmap='viridis_r', edgecolor='none', alpha=0.6)
+    
+    # Thiết lập phân bổ bề mặt đồng nhất
+    surf1 = ax1.plot_surface(T_mesh, P_mesh, Rho_mesh, cmap='viridis_r', edgecolor='none', alpha=0.5)
+    
+    # 🌟 ĐỒNG BỘ CHÍNH XÁC VỊ TRÍ ĐIỂM TRÊN TRỤC 3D (Đã tăng s lên 200 và thêm zorder để nổi hẳn lên trên bề mặt)
     if not np.isnan(rho_work):
-        ax1.scatter(T_work, P_work, rho_work, color='red', s=120, label='Điểm làm việc', zorder=5)
-    ax1.set_xlabel("Nhiệt độ (°C)")
-    ax1.set_ylabel("Áp suất (MPa)")
-    ax1.set_zlabel("Mật độ (kg/m³)")
+        ax1.scatter(T_work, P_work, rho_work, color='red', edgecolor='black', s=200, label='Điểm làm việc', zorder=100)
+    
+    ax1.set_xlabel("Nhiệt độ (°C)", labelpad=10)
+    ax1.set_ylabel("Áp suất (MPa)", labelpad=10)
+    ax1.set_zlabel("Mật độ (kg/m³)", labelpad=10)
+    
+    # 🌟 Điều chỉnh góc nhìn (Elevation, Azimuth) phù hợp để nhìn rõ vị trí chấm đỏ bám trên mặt cong
+    ax1.view_init(elev=25, azim=-120)
+    ax1.legend(loc='upper right')
     st.pyplot(fig1)
 
 with plot_col2:
@@ -240,3 +242,4 @@ with dl_col2:
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         export_df.to_excel(writer, index=False, sheet_name='Thermodynamic')
     excel_data = buffer.getvalue()
+    st.download_button(label="📥 Tải dữ liệu dạng (.XLSX Excel)", data=excel_data, file_name="matrix_report.xlsx", mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
