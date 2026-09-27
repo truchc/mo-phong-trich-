@@ -2,6 +2,7 @@ import streamlit as st
 import CoolProp.CoolProp as CP
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import pandas as pd
 import io
 import os
@@ -216,27 +217,25 @@ with plot_col2:
     ax2.grid(True, linestyle=':', alpha=0.6)
     st.pyplot(fig2)
 
-# --- XUẤT FILE MA TRẬN DỮ LIỆU ---
-st.write("### 💾 Xuất ma trận dữ liệu mô phỏng nền")
-flat_T = T_mesh.flatten()
-flat_P = P_mesh.flatten()
-flat_Rho = Rho_mesh.flatten()
-flat_H = H_mesh.flatten()
+# --- CHÈN: GIẢN ĐỒ PHA TƯƠNG TÁC PLOTLY (CỠ CHỮ 20, KHÔNG LỖI TITLEFONT) ---
+st.write("---")
+st.write("### 🌐 Giản đồ pha tương tác của Nước (Thang đo Áp suất Logarit)")
 
-export_df = pd.DataFrame({
-    "Nhiệt độ (°C)": flat_T,
-    "Áp suất (MPa)": flat_P,
-    "Mật độ (kg/m³)": flat_Rho,
-    "Enthalpy (kJ/kg)": flat_H
-}).dropna()
+# Khởi tạo dữ liệu mô hình nhiệt động của nước
+T_tp = 0.01
+P_tp_atm = 0.006036  # atm
 
-dl_col1, dl_col2 = st.columns(2)
-with dl_col1:
-    csv_data = export_df.to_csv(index=False).encode('utf-8')
-    st.download_button(label="📥 Tải dữ liệu dạng (.CSV)", data=csv_data, file_name="matrix_data.csv", mime='text/csv', use_container_width=True)
+T_sub = np.linspace(-50, T_tp, 150)
+P_sub = P_tp_atm * np.exp(22.5 * (1 - (T_tp + 273.15) / (T_sub + 273.15)))
 
-with dl_col2:
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        export_df.to_excel(writer, index=False, sheet_name='Thermodynamic')
-    excel_data = buffer.getvalue()
+T_vap = np.linspace(T_tp, 150, 150)
+P_vap = P_tp_atm * np.exp(13.1 * (1 - (T_tp + 273.15) / (T_vap + 273.15)))
+
+P_melt = np.logspace(np.log10(P_tp_atm), 3, 150)
+T_melt = T_tp - 0.007 * (P_melt - P_tp_atm)
+
+fig_interact = go.Figure()
+
+# Thêm các vùng đổ bóng tương tác (Pha)
+fig_interact.add_trace(go.Scatter(
+    x=np.concatenate([T_sub, T_vap, [150, -50]]), y=np.concatenate([P_sub, P_vap, [1e-5, 1e-5]]),
