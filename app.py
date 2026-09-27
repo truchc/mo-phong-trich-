@@ -56,7 +56,7 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ ĐƯỢC CHỈNH SỬA CHUẨN XÁC) ---
+# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ ĐƯỢC FIX LỖI TRAN ĐIỆN MÔI) ---
 def calculate_chemical_solvent_props(T_celsius, P_mpa, fluid_str):
     if fluid_type != "1. Nước cận tới hạn (Thuần túy)":
         return np.nan, np.nan
@@ -64,17 +64,28 @@ def calculate_chemical_solvent_props(T_celsius, P_mpa, fluid_str):
     T_k = T_celsius + 273.15
     P_pascal = P_mpa * 1e6
     
-    # Cách 1: Gọi thuộc tính hằng số điện môi chuẩn của nước từ phương trình trạng thái Helmholtz (IAPWS) trong CoolProp
+    # Thử gọi thuộc tính lõi trực tiếp từ CoolProp trước
     try:
         epsilon = CP.PropsSI('DIELECTRIC_CONSTANT', 'T', T_k, 'P', P_pascal, fluid_str)
     except:
-        # Cách 2: Phương pháp dự phòng theo mô hình toán Uematsu-Franck nếu bản dựng CoolProp cục bộ bị giới hạn tham số
+        # Nếu CoolProp lỗi/không hỗ trợ, sử dụng phương trình Uematsu-Franck chuẩn hóa (IAPWS)
         try:
-            rho_kg_m3 = CP.PropsSI('D', 'T', T_k, 'P', P_pascal, fluid_str)
-            A = [0, 7.62571e1, 2.44003e2, -1.40569e2, 2.77841e1, -9.62805e-1, 4.17909e-2, -1.02099e-3, -4.52059e-5, 8.46395e-7]
-            r = rho_kg_m3 / 1000.0
-            t = 298.15 / T_k
-            epsilon = 1.0 + (A[1]/t)*r + (A[2]/t + A[3] + A[4]*t)*r**2 + (A[5]/t + A[6]*t)*r**3 + (A[7]/t + A[8] + A[9]*t)*r**4
+            rho = CP.PropsSI('D', 'T', T_k, 'P', P_pascal, fluid_str) # Mật độ thực tế từ CoolProp
+            
+            # Các hằng số chuẩn của phương trình Uematsu-Franck
+            A = [0, 7.62571e1, 2.44003e2, -1.40569e2, 2.77841e1, -9.62805, 4.17909e-1, -1.02099e-2, -4.52059e-4, 8.46395e-6]
+            
+            # Tham số rút gọn theo tỉ lệ nhiệt độ và mật độ tới hạn của nước
+            T_star = T_k / 298.15
+            rho_star = rho / 1000.0
+            
+            # Triển khai phương trình đa thức IAPWS chuẩn tránh gom sai lũy thừa
+            g1 = A[1] / T_star
+            g2 = A[2] / T_star + A[3] + A[4] * T_star
+            g3 = A[5] / T_star + A[6] * T_star + A[7] * (T_star**2)
+            g4 = A[8] / (T_star**2) + A[9] / (T_star**3)
+            
+            epsilon = 1.0 + g1 * rho_star + g2 * (rho_star**2) + g3 * (rho_star**3) + g4 * (rho_star**4)
         except:
             epsilon = np.nan
             
@@ -96,16 +107,14 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
         h = CP.PropsSI('H', 'T', T_kelvin, 'P', P_pascal, fluid_str) / 1000
         s = CP.PropsSI('S', 'T', T_kelvin, 'P', P_pascal, fluid_str) / 1000
         
-        # 🌟 LOGIC ĐỘNG: Tính toán mật độ pha hơi bão hòa tại T hiện tại để làm mốc so sánh
         try:
             rho_gas_sat = CP.PropsSI('D', 'T', T_kelvin, 'Q', 1, fluid_str)
         except:
-            # Nếu sát hoặc vượt quá điểm tới hạn, đặt giá trị mốc an toàn
             rho_gas_sat = 250.0
 
         if T_celsius >= T_critical:
             status = "Siêu tới hạn (Supercritical Fluid)"
-        elif rho > (rho_gas_sat + 20.0): # Nếu mật độ lớn hơn hẳn pha hơi bão hòa thì chắc chắn là lỏng
+        elif rho > (rho_gas_sat + 20.0): 
             status = "Cận tới hạn (Pha Lỏng)"
         else:
             status = "Pha Hơi / Quá nhiệt"
@@ -119,7 +128,7 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
 # Tính toán giá trị tại điểm chọn thực tế
 rho_work, h_work, s_work, status_work = calculate_properties(T_work, P_work, fluid_string, filter_liquid=False)
 
-# Cập nhật lời gọi hàm truyền đúng tham số nhiệt độ, áp suất và chuỗi dung môi
+# Gọi hàm tính toán đặc tính dung môi đã được sửa đổi cấu trúc đa thức
 epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, P_work, fluid_string)
 
 # --- HIỂN THỊ THÔNG SỐ LÊN GIAO DIỆN ---
@@ -131,7 +140,6 @@ with col_m1:
     metrics_col2.metric("Enthalpy (h)", f"{h_work:.2f} kJ/kg" if not np.isnan(h_work) else "N/A")
     metrics_col3.metric("Entropy (s)", f"{s_work:.2f} kJ/kg·K" if not np.isnan(s_work) else "N/A")
     
-    # HIỂN THỊ CHÍNH XÁC KHỐI THÔNG BÁO THEO HỆ MỚI
     if "Pha Lỏng" in status_work or "Siêu tới hạn" in status_work:
         st.success(f"**Trạng thái hệ thống:** {status_work}")
     else:
@@ -186,7 +194,6 @@ with plot_col2:
     contour = ax2.contourf(T_mesh, P_mesh, H_mesh, levels=20, cmap='plasma', alpha=0.6)
     fig2.colorbar(contour, ax=ax2, label="Enthalpy (kJ/kg)")
     
-    # Vẽ đường ranh giới bão hòa lỏng-hơi thực tế màu cam đậm
     T_sat_line = np.linspace(t_plot_min, T_critical - 1.0, 50)
     P_sat_line = []
     for t_s in T_sat_line:
@@ -232,5 +239,3 @@ with dl_col1:
 
 with dl_col2:
     buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        export_df.to_excel(writer, index=False, sheet_name='Thermodynamic')
