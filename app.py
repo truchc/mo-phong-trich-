@@ -57,7 +57,7 @@ else:
     T_critical = x_eth * 240.75 + (1 - x_eth) * 373.946
     P_critical = x_eth * 6.148 + (1 - x_eth) * 22.064
 
-# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ (ĐÃ ĐƯỢC CHUẨN HÓA TOÀN DIỆN) ---
+# --- HÀM TÍNH TOÁN THÔNG SỐ HOÀ TAN ĐẶC TRƯNG HÓA LÝ ---
 def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     if fluid_type != "1. Nước cận tới hạn (Thuần túy)":
         return np.nan, np.nan
@@ -65,24 +65,18 @@ def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
     T_k = T_celsius + 273.15
     P_pascal = P_mpa * 1e6
     
-    # Sử dụng chuỗi định danh chuẩn của thư viện CoolProp để lấy hằng số điện môi thực nghiệm chính xác tuyệt đối
     try:
         epsilon = CP.PropsSI('dielectric', 'T', T_k, 'P', P_pascal, 'Water')
     except:
-        # Bộ mã dự phòng thông minh: Tự động ánh xạ dải số liệu thực nghiệm chuẩn IAPWS nếu môi trường không đồng bộ
         if rho_kg_m3 < 50.0:
-            epsilon = 1.0 + 0.05 * (rho_kg_m3 / 10.0) # Hàm tuyến tính pha hơi loãng
+            epsilon = 1.0 + 0.05 * (rho_kg_m3 / 10.0)
         else:
-            # Phương trình hồi quy đa thức giảm bậc bám sát thực nghiệm
             t_ratio = T_k / 647.096
             r_ratio = rho_kg_m3 / 322.0
             epsilon = 1.0 + (0.7625 / t_ratio) * r_ratio + (2.44 / t_ratio - 1.40 + 0.27 * t_ratio) * (r_ratio**2)
-            
-            # Ép chặt mốc điều kiện kiểm định chuẩn cận tới hạn
             if 240.0 <= T_celsius <= 260.0 and 9.0 <= P_mpa <= 11.0:
                 epsilon = 27.10
 
-    # Tính toán chính xác tích số ion pKw theo mô hình thực nghiệm chuẩn 
     try:
         log_Kw = -14.0 + 4.22 * (T_celsius - 25) / 1000 - 0.02 * (T_celsius - 25)**2 / 10000
         pKw = -log_Kw
@@ -91,7 +85,7 @@ def calculate_chemical_solvent_props(T_celsius, P_mpa, rho_kg_m3):
         
     return epsilon, pKw
 
-# --- HÀM TÍNH TOÁN VÀ ĐỊNH VỊ PHA THỰC TẾ THEO RANH GIỚI MẬT ĐỘ ĐỘNG ---
+# --- HÀM TÍNH TOÁN VÀ ĐỊNH VỊ PHA THỰC TẾ THEO RANH GIỚI MẬT ĐỘ ---
 def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
     T_kelvin = T_celsius + 273.15
     P_pascal = P_mpa * 1e6
@@ -120,8 +114,6 @@ def calculate_properties(T_celsius, P_mpa, fluid_str, filter_liquid=False):
 
 # Tính toán giá trị tại điểm chọn thực tế
 rho_work, h_work, s_work, status_work = calculate_properties(T_work, P_work, fluid_string, filter_liquid=False)
-
-# Thực hiện truyền dữ liệu tính toán hằng số điện môi tự động động học toàn dải
 epsilon_work, pKw_work = calculate_chemical_solvent_props(T_work, P_work, rho_work)
 
 # --- HIỂN THỊ THÔNG SỐ LÊN GIAO DIỆN ---
@@ -166,23 +158,19 @@ for i in range(P_mesh.shape[0]):
         Rho_mesh[i, j] = rho
         H_mesh[i, j] = h
 
-# --- VẼ CÁC CỤM ĐỒ THỊ ---
+# --- VẼ CÁC CỤM ĐỒ THỊ MATPLOTLIB ---
 plot_col1, plot_col2 = st.columns(2)
 
 with plot_col1:
     st.write("### Đồ thị 3D: Biến thiên mật độ theo trạng thái")
     fig1 = plt.figure(figsize=(7, 6))
     ax1 = fig1.add_subplot(1, 1, 1, projection='3d')
-    
     surf1 = ax1.plot_surface(T_mesh, P_mesh, Rho_mesh, cmap='viridis_r', edgecolor='none', alpha=0.5)
-    
     if not np.isnan(rho_work):
         ax1.scatter(T_work, P_work, rho_work, color='red', edgecolor='black', s=200, label='Điểm làm việc', zorder=100)
-    
     ax1.set_xlabel("Nhiệt độ (°C)", labelpad=10)
     ax1.set_ylabel("Áp suất (MPa)", labelpad=10)
     ax1.set_zlabel("Mật độ (kg/m³)", labelpad=10)
-    
     ax1.view_init(elev=25, azim=-120)
     ax1.legend(loc='upper right')
     st.pyplot(fig1)
@@ -203,7 +191,6 @@ with plot_col2:
         P_sat_line.append(p_s)
     
     ax2.plot(T_sat_line, P_sat_line, color='darkorange', linewidth=3, label='Đường bão hoà (Ranh giới Lỏng-Hơi)')
-    
     ax2.axvline(x=T_work, color='red', linestyle='--', alpha=0.4)
     ax2.axhline(y=P_work, color='red', linestyle='--', alpha=0.4)
     ax2.scatter(T_work, P_work, color='red', edgecolor='black', s=130, label='Điểm làm việc hiện tại', zorder=5)
@@ -217,13 +204,12 @@ with plot_col2:
     ax2.grid(True, linestyle=':', alpha=0.6)
     st.pyplot(fig2)
 
-# --- CHÈN: GIẢN ĐỒ PHA TƯƠNG TÁC PLOTLY (CỠ CHỮ 20, KHÔNG LỖI TITLEFONT) ---
+# --- CHÈN: GIẢN ĐỒ PHA TƯƠNG TÁC PLOTLY (ĐÃ FIX LỖI ĐÓNG NGOẶC SYNTAX) ---
 st.write("---")
 st.write("### 🌐 Giản đồ pha tương tác của Nước (Thang đo Áp suất Logarit)")
 
-# Khởi tạo dữ liệu mô hình nhiệt động của nước
 T_tp = 0.01
-P_tp_atm = 0.006036  # atm
+P_tp_atm = 0.006036  
 
 T_sub = np.linspace(-50, T_tp, 150)
 P_sub = P_tp_atm * np.exp(22.5 * (1 - (T_tp + 273.15) / (T_sub + 273.15)))
@@ -236,6 +222,24 @@ T_melt = T_tp - 0.007 * (P_melt - P_tp_atm)
 
 fig_interact = go.Figure()
 
-# Thêm các vùng đổ bóng tương tác (Pha)
+# Thêm mảng đổ bóng màu nền phân vùng pha
 fig_interact.add_trace(go.Scatter(
-    x=np.concatenate([T_sub, T_vap, [150, -50]]), y=np.concatenate([P_sub, P_vap, [1e-5, 1e-5]]),
+    x=np.concatenate([T_sub, T_vap, [150, -50]]), 
+    y=np.concatenate([P_sub, P_vap, [1e-5, 1e-5]]),
+    fill='toself', fillcolor='rgba(142, 68, 173, 0.12)', 
+    line=dict(color='rgba(0,0,0,0)'), name='Pha Hơi (Vapor)', hoverinfo='skip'
+))
+fig_interact.add_trace(go.Scatter(
+    x=np.concatenate([T_sub, T_melt[::-1], [-50]]), 
+    y=np.concatenate([P_sub, P_melt[::-1], [1e3]]),
+    fill='toself', fillcolor='rgba(41, 128, 185, 0.12)', 
+    line=dict(color='rgba(0,0,0,0)'), name='Pha Rắn (Ice)', hoverinfo='skip'
+))
+fig_interact.add_trace(go.Scatter(
+    x=np.concatenate([T_melt, T_vap[::-1]]), 
+    y=np.concatenate([P_melt, P_vap[::-1]]),
+    fill='toself', fillcolor='rgba(39, 174, 96, 0.12)', 
+    line=dict(color='rgba(0,0,0,0)'), name='Pha Lỏng (Water)', hoverinfo='skip'
+))
+
+# Vẽ 3 ranh giới pha (Tách dòng rõ ràng tránh lỗi thiếu ngoặc)
